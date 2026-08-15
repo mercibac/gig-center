@@ -1,0 +1,67 @@
+[package]
+name = "gig-center"
+version = "0.1.0"
+edition = "2021"
+description = "Gig Control Center - Live performance setup automation"
+
+[dependencies]
+# Default features minus `renderer-femtovg`: the OpenGL renderer is never
+# selected (see main.rs) and linking it in only adds binary size to page in.
+slint = { version = "=1.16.1", default-features = false, features = [
+    "std",
+    "backend-default",
+    "renderer-software",
+    "accessibility",
+    "compat-1-2",
+    "unstable-winit-030",
+] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+enigo = "0.2"
+arboard = "3"
+glob = "0.3"
+sysinfo = "0.30"
+image = "0.25.10"
+rustfft = "6"
+
+[dependencies.windows]
+version = "0.58"
+features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_UI_Shell",
+    "Win32_UI_HiDpi",
+    "Win32_System_Com",
+    "Win32_System_SystemInformation",
+    "Win32_System_Threading",
+    "Win32_Media_Audio",
+    "Win32_Media_Audio_Endpoints",
+]
+
+[dev-dependencies]
+# Kept only so the benchmark test can time the old brute-force matcher against
+# the current FFT one. Not linked into the shipped binary.
+imageproc = "0.27.0"
+
+[build-dependencies]
+slint-build = "=1.16.1"
+winresource = "0.1"
+# Scales the window icon at build time instead of on every launch.
+image = "0.25.10"
+
+# The screen matcher is numeric hot code — an unoptimised build makes it tens of
+# times slower, which is what made "clicking an image" feel broken in dev runs.
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3
+
+[profile.release]
+# Do not set `panic = "abort"` here: console::run_guarded relies on catch_unwind
+# to re-enable the UI buttons after a worker thread panics.
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+strip = true

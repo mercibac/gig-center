@@ -1,0 +1,218 @@
+import { LineEdit, VerticalBox, ScrollView, HorizontalBox } from "std-widgets.slint";
+
+// ==========================================
+// CUSTOM BUTTON COMPONENT (Optimized)
+// ==========================================
+component DarkButton inherits Rectangle {
+    in-out property <string> btn-text: "Button";
+    in-out property <bool> btn-enabled: true;
+    // Added customizable background colors to replace hardcoded raw Rectangles
+    in-out property <color> btn-color: #555555;
+    in-out property <color> btn-color-disabled: #333333;
+    callback clicked();
+
+    background: root.btn-enabled ? root.btn-color : root.btn-color-disabled;
+    border-radius: 4px;
+
+    Text {
+        text: root.btn-text;
+        color: root.btn-enabled ? white : #888888;
+        font-size: 20px;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    TouchArea {
+        enabled: root.btn-enabled;
+        clicked => { root.clicked(); }
+    }
+}
+
+// ==========================================
+// MAIN APPLICATION WINDOW
+// ==========================================
+export component MainWindow inherits Window {
+    title: "Gig Control Center";
+    preferred-width: 800px;
+    preferred-height: 600px;
+    background: #2b2b2b;
+
+    // --- Main State ---
+    in-out property <string> launch-text: "LAUNCH GIG RIG";
+    in-out property <string> clear-text: "CLEAR DECK";
+    in-out property <string> console-text: "";
+    in-out property <bool> buttons-enabled: true;
+    
+    // --- Modal State ---
+    in-out property <bool> show-settings: false;
+    in-out property <string> phone-name: "";
+    in-out property <string> hotspot-name: "";
+    in-out property <string> osc-path: "";
+
+    // --- Callbacks ---
+    callback launch-clicked();
+    callback clear-clicked();
+    callback save-clicked(string, string, string);
+
+    // ==========================================
+    // MAIN UI LAYER
+    // ==========================================
+    VerticalBox {
+        padding: 20px;
+        spacing: 15px;
+
+        // 1. Top Button Frame
+        HorizontalBox {
+            spacing: 10px;
+            alignment: center;
+
+            DarkButton {
+                btn-text: root.clear-text;
+                btn-enabled: root.buttons-enabled && !root.show-settings;
+                height: 60px;
+                min-width: 200px;
+                clicked => { root.clear-clicked(); }
+            }
+            
+            // Reused DarkButton instead of raw Rectangle
+            DarkButton {
+                btn-text: root.launch-text;
+                btn-enabled: root.buttons-enabled && !root.show-settings;
+                btn-color: #007acc;
+                btn-color-disabled: #004c80;
+                height: 60px;
+                min-width: 200px;
+                clicked => { root.launch-clicked(); }
+            }
+        }
+
+        // 2. Console Output Area
+        Rectangle {
+            horizontal-stretch: 1;
+            vertical-stretch: 1;
+            background: #1e1e1e;
+            border-radius: 4px;
+            border-width: 1px;
+            border-color: #555555;
+            clip: true;
+
+            ScrollView {
+                VerticalLayout {
+                    padding: 10px;
+                    spacing: 0px;
+
+                    Text {
+                        text: root.console-text;
+                        font-family: "Consolas";
+                        font-size: 14px;
+                        color: #d4d4d4;
+                        wrap: word-wrap;
+                        horizontal-alignment: left;
+                    }
+                }
+            }
+        }
+
+        // 3. Bottom Settings Button
+        HorizontalBox {
+            alignment: end;
+            DarkButton {
+                btn-text: "⚙ Settings";
+                height: 50px;
+                min-width: 130px;
+                btn-enabled: root.buttons-enabled && !root.show-settings;
+                clicked => { root.show-settings = true; }
+            }
+        }
+    }
+
+    // ==========================================
+    // MODAL OVERLAY LAYER
+    // ==========================================
+    if (root.show-settings) : Rectangle {
+        width: parent.width;
+        height: parent.height;
+        background: #00000099; // Semi-transparent black dimming
+
+        // Block clicks to main UI
+        TouchArea {
+            width: 100%;
+            height: 100%;
+        }
+
+        // Settings box
+        Rectangle {
+            width: 650px;
+            height: 300px;
+            background: #2b2b2b;
+            border-radius: 8px;
+            border-width: 1px;
+            border-color: #444444;
+            
+            // Drop shadow effect
+            drop-shadow-color: #000000;
+            drop-shadow-blur: 15px;
+            drop-shadow-offset-y: 5px;
+
+            VerticalBox {
+                padding: 30px;
+                spacing: 20px;
+
+                Text {
+                    text: "Configuration Settings";
+                    color: white;
+                    font-size: 18px;
+                    font-weight: 700;
+                    horizontal-alignment: center;
+                }
+
+                HorizontalBox {
+                    alignment: center;
+                    spacing: 20px;
+                    Text { text: "Phone Name (KDE Connect):"; color: #d4d4d4; vertical-alignment: center; min-width: 220px; }
+                    phone_input := LineEdit { text: root.phone-name; horizontal-stretch: 1; }
+                }
+
+                HorizontalBox {
+                    alignment: center;
+                    spacing: 20px;
+                    Text { text: "Hotspot Name (SSID):"; color: #d4d4d4; vertical-alignment: center; min-width: 220px; }
+                    hotspot_input := LineEdit { text: root.hotspot-name; horizontal-stretch: 1; }
+                }
+
+                HorizontalBox {
+                    alignment: center;
+                    spacing: 20px;
+                    Text { text: "OSC File Path:"; color: #d4d4d4; vertical-alignment: center; min-width: 220px; }
+                    osc_input := LineEdit { text: root.osc-path; horizontal-stretch: 1; }
+                }
+
+                HorizontalBox {
+                    alignment: center;
+                    padding-top: 10px;
+                    spacing: 15px;
+                    
+                    DarkButton {
+                        btn-text: "CANCEL";
+                        min-width: 170px;
+                        height: 40px;
+                        btn-color: #555555;
+                        clicked => { root.show-settings = false; }
+                    }
+
+                    // Reused DarkButton for Save
+                    DarkButton {
+                        btn-text: "SAVE SETTINGS";
+                        btn-color: #007acc;
+                        btn-color-disabled: #004c80;
+                        min-width: 170px;
+                        height: 40px;
+                        clicked => {
+                            root.save-clicked(phone_input.text, hotspot_input.text, osc_input.text);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

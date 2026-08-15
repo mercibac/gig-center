@@ -1,0 +1,9 @@
+- compilation of the first version
+uv run pyinstaller --noconfirm --onefile --windowed --name "Gig Control Center" --icon="icon.ico" --add-data "assets/osc_icon.png;./assets" --add-data "icon.ico;." --add-data "assets/defender_activate_icon.png;./assets" --add-data "assets/defender_protection_icon.png;./assets" --add-data "assets/defender_realtime_icon.png;./assets" --add-data "assets/defender_settings_icon.png;./assets" --add-data "settings.json;." main_ui.py
+
+
+- compilation of slint version with nuitka
+uv run nuitka --standalone --windows-disable-console --output-filename="Gig Control Center.exe" --windows-icon-from-ico="icon.ico" --include-data-files="app.slint=app.slint" --include-data-files="icon.ico=icon.ico" --include-data-files="settings.json=settings.json" --include-data-files="assets/osc_icon.png=assets/osc_icon.png" --include-data-files="assets/defender_activate_icon.png=assets/defender_activate_icon.png" --include-data-files="assets/defender_protection_icon.png=assets/defender_protection_icon.png" --include-data-files="assets/defender_realtime_icon.png=assets/defender_realtime_icon.png" --include-data-files="assets/defender_settings_icon.png=assets/defender_settings_icon.png" new_ui.py
+
+- compilation standalone with nuitka and upx for compression
+uv run nuitka --standalone --follow-imports --deployment --lto=yes --windows-disable-console --output-filename="Gig Control Center.exe" --windows-icon-from-ico="icon.ico" --windows-company-name="Your Company" --windows-product-name="Gig Control Center" --windows-file-version="1.0.0.0" --windows-product-version="1.0.0.0" --include-data-files="app.slint=app.slint" --include-data-files="icon.ico=icon.ico" --include-data-files="settings.json=settings.json" --include-data-dir="assets=assets" --plugin-enable=upx --upx-binary="C:\path\to\upx.exe" --remove-output --no-pyi-file new_ui.py
