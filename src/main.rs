@@ -4,6 +4,7 @@
 mod console;
 mod app_icon;
 mod connection;
+mod first_paint;
 mod gig_close;
 mod gig_launcher;
 mod ncc;
@@ -24,6 +25,10 @@ slint::include_modules!();
 fn main() -> Result<(), slint::PlatformError> {
     startup_probe::start();
 
+    // Must be armed before any window exists: the window it cloaks is created
+    // later, by the event loop.
+    first_paint::start();
+
     // Set explicit AppUserModelID
     unsafe {
         windows::Win32::UI::Shell::SetCurrentProcessExplicitAppUserModelID(windows::core::w!(
@@ -42,7 +47,7 @@ fn main() -> Result<(), slint::PlatformError> {
     // dialog loses its drop shadow (see app.slint).
     let selector = slint::BackendSelector::new().renderer_name("software".into());
     let selector = app_icon::configure(selector);
-    let selector = startup_probe::configure(selector);
+    let selector = first_paint::configure(selector);
     selector.select()?;
     startup_probe::mark("icon");
 
@@ -145,5 +150,6 @@ fn main() -> Result<(), slint::PlatformError> {
     });
 
     startup_probe::mark("ui_init");
+    first_paint::arm_deadline();
     app.run()
 }

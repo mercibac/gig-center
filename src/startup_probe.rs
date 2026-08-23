@@ -15,11 +15,6 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::Instant;
 
-use slint::winit_030::winit::event::WindowEvent;
-use slint::winit_030::winit::event_loop::ActiveEventLoop;
-use slint::winit_030::winit::window::WindowId;
-use slint::winit_030::{CustomApplicationHandler, EventResult};
-
 struct Probe {
     log: PathBuf,
     entry: Instant,
@@ -27,7 +22,8 @@ struct Probe {
     /// Process creation until `main` was entered — image load and DLL resolution.
     preload_ms: f64,
     phases: Vec<(&'static str, f64)>,
-    /// First completed draw. Exact for every renderer — see [`FrameWatch`].
+    /// First completed draw, as reported by [`note_first_frame`]. Exact for
+    /// every renderer, unlike `painted_ms`.
     frame_ms: Option<f64>,
     /// End of the first render pass, as reported by the renderer itself. Only
     /// the GPU renderers implement this; kept as a cross-check on `frame_ms`.
@@ -57,7 +53,9 @@ pub fn start() {
         phases: Vec::new(),
         frame_ms: None,
         painted_ms: None,
-        pending: 0,
+        // The first frame is always reported; the renderer's own notifier adds
+        // itself to this if it turns out to be supported.
+        pending: 1,
     });
 }
 
@@ -72,15 +70,10 @@ pub fn mark(name: &'static str) {
     probe.last = now;
 }
 
-/// Install the event loop hook that detects the first completed frame.
-pub fn configure(selector: slint::BackendSelector) -> slint::BackendSelector {
-    let mut guard = PROBE.lock().unwrap();
-    let Some(probe) = guard.as_mut() else {
-        return selector;
-    };
-    probe.pending += 1;
-    drop(guard);
-    selector.with_winit_custom_application_handler(FrameWatch { drawn: false })
+/// Record the moment the first frame reached the screen. Called by
+/// [`crate::first_paint`], which already watches the event loop for it.
+pub fn note_first_frame() {
+    record(|probe| &mut probe.frame_ms);
 }
 
 /// Ask the renderer to report its own first frame, as a cross-check. Not every
@@ -98,39 +91,6 @@ pub fn watch_first_frame(window: &slint::Window) {
         .is_ok();
     if hooked {
         PROBE.lock().unwrap().as_mut().unwrap().pending += 1;
-    }
-}
-
-/// Watches the winit event loop for the first frame to be fully drawn.
-///
-/// `RedrawRequested` is handled by drawing synchronously, so by the time the
-/// loop is about to wait again, the pixels are on screen. Unlike the renderer's
-/// own notifier this holds for the software renderer too, which is the whole
-/// point — it is the renderer being compared.
-struct FrameWatch {
-    drawn: bool,
-}
-
-impl CustomApplicationHandler for FrameWatch {
-    fn window_event(
-        &mut self,
-        _event_loop: &ActiveEventLoop,
-        _window_id: WindowId,
-        _winit_window: Option<&slint::winit_030::winit::window::Window>,
-        _slint_window: Option<&slint::Window>,
-        event: &WindowEvent,
-    ) -> EventResult {
-        if matches!(event, WindowEvent::RedrawRequested) {
-            self.drawn = true;
-        }
-        EventResult::Propagate
-    }
-
-    fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) -> EventResult {
-        if self.drawn {
-            record(|probe| &mut probe.frame_ms);
-        }
-        EventResult::Propagate
     }
 }
 
