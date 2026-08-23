@@ -1,3 +1,4 @@
+import subprocess
 import pyautogui
 from utils import resource_path
 import time
@@ -20,16 +21,16 @@ def click_on_img(img):
     except pyautogui.ImageNotFoundException:
         print("PyAutoGUI could not locate the image.")
 
+def open_windows_defender():
+    try:
+        # 'start windowsdefender:' is the CMD command to open the security center
+        subprocess.run('start windowsdefender:', shell=True, check=True)
+        print("Windows Defender opened successfully.")
+    except subprocess.CalledProcessError as e:
+        print(f"Failed to open Windows Defender. Error: {e}")
 
 def switch_defender(option):
-    pyautogui.click()
-    pyautogui.press("win")
-    time.sleep(1)
-    pyautogui.write("windows security", interval=0.1)
-
-    time.sleep(0.5)
-
-    pyautogui.press("enter")
+    open_windows_defender()
 
     time.sleep(7)
 
