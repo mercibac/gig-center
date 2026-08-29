@@ -1,4 +1,3 @@
-use crate::console_log;
 use std::thread;
 use std::time::Duration;
 use sysinfo::System;

@@ -1,4 +1,3 @@
-use crate::console_log;
 use crate::settings::Settings;
 use arboard::Clipboard;
 use enigo::{Button, Coordinate, Enigo, Key, Keyboard, Mouse, Settings as EnigoSettings};
@@ -9,7 +8,12 @@ use std::time::Duration;
 use windows::Win32::UI::WindowsAndMessaging::{SetForegroundWindow, ShowWindow, SW_RESTORE};
 
 fn get_wifi_ip() -> Option<String> {
-    let output = Command::new("ipconfig").output().ok()?;
+    // Keep ipconfig's console host hidden so no window flashes on screen.
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    let output = Command::new("ipconfig")
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()
+        .ok()?;
     let text = String::from_utf8_lossy(&output.stdout);
     let mut in_wifi = false;
 

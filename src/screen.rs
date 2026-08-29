@@ -12,7 +12,6 @@
 //! `TM_CCOEFF_NORMED` in O(N log N) — see that module for why the previous
 //! `imageproc`-based search took minutes.
 
-use crate::console_log;
 use crate::ncc;
 use crate::utils::resource_path;
 use enigo::{Button, Coordinate, Enigo, Mouse};

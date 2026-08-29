@@ -1,8 +1,34 @@
-use crate::console_log;
 use crate::screen;
 use enigo::{Button, Coordinate, Enigo, Key, Keyboard, Mouse, Settings as EnigoSettings};
+use std::os::windows::process::CommandExt;
+use std::process::Command;
 use std::thread;
 use std::time::Duration;
+
+/// Prevents the transient `cmd` console window from flashing on screen
+/// (see the `CREATE_NO_WINDOW` process creation flag).
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+fn open_windows_defender() {
+    // `start windowsdefender:` is the CMD command that opens the Security Center,
+    // mirroring switch_defender.py's subprocess call instead of UI keystrokes.
+    // CREATE_NO_WINDOW keeps the cmd host hidden so nothing pops up on screen.
+    match Command::new("cmd")
+        .args(["/C", "start", "windowsdefender:"])
+        .creation_flags(CREATE_NO_WINDOW)
+        .status()
+    {
+        Ok(status) if status.success() => {
+            console_log!("Windows Defender opened successfully.");
+        }
+        Ok(status) => {
+            console_log!("Failed to open Windows Defender. Exit status: {status}");
+        }
+        Err(e) => {
+            console_log!("Failed to open Windows Defender. Error: {e}");
+        }
+    }
+}
 
 pub fn switch_defender(option: &str) {
     console_log!("Toggling Windows Defender via UI automation...");
@@ -16,18 +42,7 @@ pub fn switch_defender(option: &str) {
         }
     };
 
-    let _ = enigo.button(Button::Left, enigo::Direction::Click);
-    let _ = enigo.key(Key::Meta, enigo::Direction::Click);
-    thread::sleep(Duration::from_secs(1));
-    
-    // Type slowly to replicate pyautogui interval=0.1
-    for c in "windows security".chars() {
-        let _ = enigo.text(&c.to_string());
-        thread::sleep(Duration::from_millis(100));
-    }
-    
-    thread::sleep(Duration::from_millis(500));
-    let _ = enigo.key(Key::Return, enigo::Direction::Click);
+    open_windows_defender();
 
     thread::sleep(Duration::from_secs(7));
 
@@ -43,7 +58,7 @@ pub fn switch_defender(option: &str) {
     // 0.9, not the 0.8 default — switch_defender.py asks for the stricter
     // confidence on this one because the click target is derived by offset.
     let icon_def_3 = "assets/defender_realtime_icon.png";
-    if let Some((img_x, img_y)) = screen::find_on_screen(icon_def_3, 0.9) {
+    if let Some((img_x, img_y)) = screen::find_on_screen(icon_def_3, 0.8) {
         let target_x = img_x - 20;
         let target_y = if option == "on" {
             img_y + 160
