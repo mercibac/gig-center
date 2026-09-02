@@ -1,11 +1,11 @@
 fn main() {
-    slint_build::compile("app.slint").unwrap();
+    slint_build::compile("ui/app.slint").unwrap();
     prescale_window_icon();
 
     #[cfg(windows)]
     {
         let mut res = winresource::WindowsResource::new();
-        res.set_icon("icon.ico");
+        res.set_icon("assets/icon.ico");
         if let Err(e) = res.compile() {
             eprintln!("Warning: Could not compile Windows resources: {e}");
         }

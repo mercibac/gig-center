@@ -7,19 +7,7 @@ import json
 import datetime
 
 # Lightweight config import
-from utils import CONFIG_FILE
-
-
-# ---------------------------------------------------------
-# RESOURCE PATH (Optimized for Nuitka)
-# ---------------------------------------------------------
-def resource_path(relative_path):
-    """Get absolute path to resource, works for dev and for Nuitka"""
-    if hasattr(sys, "_MEIPASS"):
-        # Nuitka standalone mode
-        return os.path.join(sys._MEIPASS, relative_path)
-    # Development mode
-    return os.path.join(os.path.dirname(os.path.abspath(__file__)), relative_path)
+from utils import CONFIG_FILE, resource_path
 
 
 # --- Configuration Manager ---
@@ -31,7 +19,7 @@ DEFAULT_CONFIG = {
 
 
 def load_settings():
-    config_path = resource_path(CONFIG_FILE)
+    config_path = CONFIG_FILE
     if not os.path.exists(config_path):
         save_settings(DEFAULT_CONFIG)
         return DEFAULT_CONFIG
@@ -45,7 +33,7 @@ def load_settings():
 
 
 def save_settings(data):
-    config_path = resource_path(CONFIG_FILE)
+    config_path = CONFIG_FILE
     with open(config_path, "w") as f:
         json.dump(data, f, indent=4)
 
@@ -76,7 +64,7 @@ class GigControlApp:
         self.settings = load_settings()
 
         # Load Slint UI (optimized path)
-        components = slint.load_file(resource_path("app.slint"))
+        components = slint.load_file(resource_path("ui/app.slint"))
         self.app = components.MainWindow()
 
         # Load initial settings into UI properties

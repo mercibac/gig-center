@@ -3,6 +3,11 @@ name = "gig-center"
 version = "0.1.0"
 edition = "2021"
 description = "Gig Control Center - Live performance setup automation"
+build = "src-rs/build.rs"
+
+[[bin]]
+name = "gig-center"
+path = "src-rs/main.rs"
 
 [dependencies]
 # Default features minus `renderer-femtovg`: the OpenGL renderer is never

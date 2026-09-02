@@ -7,13 +7,19 @@ from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
 from functools import wraps
 
 
+# The project root: this file lives in src-py/, resources live next to it in
+# ui/ and assets/. Anchoring on __file__ keeps them findable whatever the
+# working directory is.
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
 def resource_path(relative_path):
     """Get absolute path to bundled resource (read-only), works for dev and for PyInstaller"""
     try:
         # PyInstaller creates a temp folder and stores path in _MEIPASS
         base_path = sys._MEIPASS  # ignore
     except Exception:
-        base_path = os.path.abspath(".")
+        base_path = _PROJECT_ROOT
 
     return os.path.join(base_path, relative_path)
 
@@ -38,8 +44,8 @@ def _get_persistent_dir():
         # Running as compiled executable — use the folder containing the .exe
         return os.path.dirname(sys.executable)
     else:
-        # Running as script — use the script's own directory
-        return os.path.abspath(".")
+        # Running as script — use the project root
+        return _PROJECT_ROOT
 
 
 # The settings file lives next to the executable, NOT inside _MEIPASS
