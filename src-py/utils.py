@@ -66,7 +66,7 @@ def _get_persistent_dir():
 CONFIG_FILE = os.path.join(_get_persistent_dir(), "settings.json")
 
 
-def _ensure_settings_file():
+def ensure_settings_file():
     """On first run after install, copy the bundled default settings to the persistent location."""
     if not os.path.exists(CONFIG_FILE):
         bundled = resource_path("settings.json")
@@ -78,7 +78,7 @@ def _ensure_settings_file():
 
 def load_config():
     """Load and return the current config from disk (always fresh)."""
-    _ensure_settings_file()
+    ensure_settings_file()
     with open(CONFIG_FILE, "r") as f:
         return json.load(f)
 

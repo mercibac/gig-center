@@ -7,7 +7,7 @@ import json
 import datetime
 
 # Lightweight config import
-from utils import CONFIG_FILE, resource_path
+from utils import CONFIG_FILE, ensure_settings_file, resource_path
 
 
 # --- Configuration Manager ---
@@ -19,6 +19,11 @@ DEFAULT_CONFIG = {
 
 
 def load_settings():
+    # A packaged build ships settings.json inside the bundle; copy it out before
+    # looking, so a fresh install starts from those values instead of the
+    # placeholders below.
+    ensure_settings_file()
+
     config_path = CONFIG_FILE
     if not os.path.exists(config_path):
         save_settings(DEFAULT_CONFIG)
