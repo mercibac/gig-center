@@ -29,7 +29,8 @@ gig-center/
 │   ├── connection.py        Wi-Fi / hotspot detection
 │   ├── snap.py              Window positioning
 │   ├── switch_defender.py   Toggles Defender real-time protection
-│   └── switch_sleep.py      Toggles sleep and monitor timeouts
+│   ├── switch_sleep.py      Toggles sleep and monitor timeouts
+│   └── window_icon.py       Title bar icon — the Python side of app_icon.rs
 │
 ├── src-rs/                  Rust version
 │   ├── build.rs             Compiles ui/app.slint, embeds assets/icon.ico, pre-scales the window icon

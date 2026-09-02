@@ -8,6 +8,7 @@ import datetime
 
 # Lightweight config import
 from utils import CONFIG_FILE, bundled_settings, ensure_settings_file, resource_path
+import window_icon
 
 
 # --- Configuration Manager ---
@@ -96,6 +97,10 @@ class GigControlApp:
             datetime.timedelta(milliseconds=100),  # Reduced from 50ms to 100ms
             self.poll_console,
         )
+
+        # Held because dropping the timer would stop the retries before the
+        # window winit creates has appeared.
+        self.icon_timer = window_icon.apply()
 
         # Connect UI Callbacks to Python functions
         self.app.launch_clicked = self.run_launch_script
