@@ -7,7 +7,7 @@ import json
 import datetime
 
 # Lightweight config import
-from utils import CONFIG_FILE, ensure_settings_file, resource_path
+from utils import CONFIG_FILE, bundled_settings, ensure_settings_file, resource_path
 
 
 # --- Configuration Manager ---
@@ -26,15 +26,22 @@ def load_settings():
 
     config_path = CONFIG_FILE
     if not os.path.exists(config_path):
-        save_settings(DEFAULT_CONFIG)
-        return DEFAULT_CONFIG
+        return _restore_defaults()
     try:
         with open(config_path, "r") as f:
             return json.load(f)
     except Exception as e:
         print(f"Warning: settings.json is corrupted. Repairing... ({e})")
-        save_settings(DEFAULT_CONFIG)
-        return DEFAULT_CONFIG
+        return _restore_defaults()
+
+
+def _restore_defaults():
+    """Write and return the shipped settings, or the placeholders above when the
+    build has none bundled."""
+    bundled = bundled_settings()
+    settings = DEFAULT_CONFIG if bundled is None else bundled
+    save_settings(settings)
+    return settings
 
 
 def save_settings(data):

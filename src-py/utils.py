@@ -76,6 +76,23 @@ def ensure_settings_file():
             shutil.copy2(bundled, CONFIG_FILE)
 
 
+def bundled_settings():
+    """The settings shipped inside the bundle, or None when there are none.
+
+    Running from source the bundle *is* the live file, so there is nothing to
+    fall back to — saying so lets callers use their own defaults instead of
+    re-reading the file they just failed on.
+    """
+    bundled = resource_path("settings.json")
+    if os.path.normpath(bundled) == os.path.normpath(CONFIG_FILE):
+        return None
+    try:
+        with open(bundled, "r") as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+
 def load_config():
     """Load and return the current config from disk (always fresh)."""
     ensure_settings_file()
