@@ -1,5 +1,7 @@
-- compilation of the first version
-uv run pyinstaller --noconfirm --onefile --windowed --name "Gig Control Center" --icon="assets/icon.ico" --add-data "assets/osc_icon.png;./assets" --add-data "assets/icon.ico;./assets" --add-data "assets/defender_activate_icon.png;./assets" --add-data "assets/defender_protection_icon.png;./assets" --add-data "assets/defender_realtime_icon.png;./assets" --add-data "assets/defender_settings_icon.png;./assets" --add-data "settings.json;." src-py/main.py
+- compilation with pyinstaller (onefile)
+  same --with / python -m note as the nuitka commands below
+  output: dist/Gig Control Center.exe
+uv run --with pyinstaller python -m PyInstaller --noconfirm --onefile --windowed --name "Gig Control Center" --icon="assets/icon.ico" --add-data "ui/app.slint;./ui" --add-data "assets/osc_icon.png;./assets" --add-data "assets/icon.ico;./assets" --add-data "assets/defender_activate_icon.png;./assets" --add-data "assets/defender_protection_icon.png;./assets" --add-data "assets/defender_realtime_icon.png;./assets" --add-data "assets/defender_settings_icon.png;./assets" --add-data "settings.json;." src-py/main.py
 
 
 - compilation of slint version with nuitka
