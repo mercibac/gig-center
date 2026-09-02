@@ -34,6 +34,7 @@ gig-center/
 ├── src-rs/                  Rust version
 │   ├── build.rs             Compiles ui/app.slint, embeds assets/icon.ico, pre-scales the window icon
 │   ├── main.rs              Entry point: backend selection, UI wiring
+│   ├── assets.rs            The screen-match templates, compiled into the binary
 │   ├── utils.rs             resource_path, volume control, timing
 │   ├── settings.rs          Load/save settings.json
 │   ├── console.rs           Thread-safe log buffer feeding the on-screen console
@@ -82,8 +83,10 @@ cargo test
 
 ## Packaging
 
-The Rust version builds to a single `target/release/gig-center.exe`, with the UI
-and icons compiled in — nothing to ship alongside it except `settings.json`.
+The Rust version builds to a single `target/release/gig-center.exe`. The UI, the
+icons and the screen-match templates are all compiled in, so it runs from
+anywhere with nothing beside it — it writes a default `settings.json` next to
+itself on first launch.
 
 The Python version is packaged with PyInstaller or Nuitka; the exact commands,
 including every `--add-data` / `--include-data-files` path, are kept in

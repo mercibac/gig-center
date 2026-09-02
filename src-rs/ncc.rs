@@ -428,9 +428,9 @@ mod tests {
     /// screen dimensions; `imageproc` needed ~94 billion ops for this.
     #[test]
     fn full_screen_search_is_fast() {
-        let template = image::open("assets/defender_activate_icon.png")
-            .expect("asset should exist")
-            .to_luma8();
+        let template = crate::assets::DEFENDER_ACTIVATE
+            .to_luma8()
+            .expect("embedded asset should decode");
         let mut screen = noise_image(1536, 864, 2024);
 
         let (px, py) = (900u32, 400u32);
@@ -472,9 +472,9 @@ mod tests {
     fn compare_against_brute_force() {
         use imageproc::template_matching::{match_template, MatchTemplateMethod};
 
-        let template = image::open("assets/defender_activate_icon.png")
-            .expect("asset should exist")
-            .to_luma8();
+        let template = crate::assets::DEFENDER_ACTIVATE
+            .to_luma8()
+            .expect("embedded asset should decode");
         let mut screen = noise_image(1536, 864, 2024);
         let (px, py) = (900u32, 400u32);
         for y in 0..template.height() {

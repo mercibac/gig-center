@@ -3,6 +3,7 @@
 #[macro_use]
 mod console;
 mod app_icon;
+mod assets;
 mod connection;
 mod first_paint;
 mod gig_close;

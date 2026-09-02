@@ -1,9 +1,12 @@
 //! Screen-image utilities — the Rust equivalent of PyAutoGUI's image-location API.
 //!
 //! Provides:
-//! - `find_on_screen(img_path, confidence)` → `Option<(i32, i32)>` — like `pyautogui.locateCenterOnScreen`
-//! - `click_on_img(img_path, enigo)`                                — like `pyautogui.click(locateCenterOnScreen(...))`
-//! - `find_img(img_path)` — shorthand with default 0.8 confidence
+//! - `find_on_screen(template, confidence)` → `Option<(i32, i32)>` — like `pyautogui.locateCenterOnScreen`
+//! - `click_on_img(template, enigo)`                               — like `pyautogui.click(locateCenterOnScreen(...))`
+//! - `find_img(template)` — shorthand with default 0.8 confidence
+//!
+//! Templates come from [`crate::assets`], compiled into the exe, so a shipped
+//! binary never depends on image files sitting next to it.
 //!
 //! Screen capture uses Win32 GDI via raw FFI — the exact same technique
 //! PIL/PyAutoGUI uses on Windows (CreateDC("DISPLAY") + BitBlt).
@@ -12,8 +15,8 @@
 //! `TM_CCOEFF_NORMED` in O(N log N) — see that module for why the previous
 //! `imageproc`-based search took minutes.
 
+use crate::assets::Template;
 use crate::ncc;
-use crate::utils::resource_path;
 use enigo::{Button, Coordinate, Enigo, Mouse};
 use image::GrayImage;
 use std::ffi::c_void;
@@ -210,20 +213,8 @@ fn capture_screen() -> Option<GrayImage> {
 /// Scores with `TM_CCOEFF_NORMED` (via [`crate::ncc`]), the same method OpenCV
 /// uses under PyAutoGUI, so `confidence` means what it means in the Python
 /// parent — higher score = better match, 1.0 = pixel-perfect.
-pub fn find_on_screen(img_path: &str, confidence: f32) -> Option<(i32, i32)> {
-    let path = resource_path(img_path);
-    if !path.exists() {
-        console_log!("Error: template image not found: {:?}", path);
-        return None;
-    }
-
-    let template = match image::open(&path) {
-        Ok(img) => img.to_luma8(),
-        Err(e) => {
-            console_log!("Error loading template image {:?}: {}", path, e);
-            return None;
-        }
-    };
+pub fn find_on_screen(template: &Template, confidence: f32) -> Option<(i32, i32)> {
+    let template_img = template.to_luma8()?;
 
     // Ensure DPI awareness before capturing the screen
     ensure_dpi_aware();
@@ -238,18 +229,19 @@ pub fn find_on_screen(img_path: &str, confidence: f32) -> Option<(i32, i32)> {
 
     console_log!(
         "Template: {}x{} ({})",
-        template.width(),
-        template.height(),
-        img_path
+        template_img.width(),
+        template_img.height(),
+        template.name
     );
 
     // Validate template fits within the screen
-    if template.width() > screen_gray.width() || template.height() > screen_gray.height() {
+    if template_img.width() > screen_gray.width() || template_img.height() > screen_gray.height()
+    {
         console_log!(
             "Error: template image ({}x{}) is larger than the screen capture ({}x{}). \
              Possible DPI scaling mismatch.",
-            template.width(),
-            template.height(),
+            template_img.width(),
+            template_img.height(),
             screen_gray.width(),
             screen_gray.height()
         );
@@ -257,15 +249,15 @@ pub fn find_on_screen(img_path: &str, confidence: f32) -> Option<(i32, i32)> {
     }
 
     let match_start = Instant::now();
-    let best = ncc::match_ccoeff_normed(&screen_gray, &template)?;
+    let best = ncc::match_ccoeff_normed(&screen_gray, &template_img)?;
     let match_ms = match_start.elapsed().as_secs_f64() * 1000.0;
 
     if best.score >= confidence {
-        let center_x = (best.x + template.width() / 2) as i32;
-        let center_y = (best.y + template.height() / 2) as i32;
+        let center_x = (best.x + template_img.width() / 2) as i32;
+        let center_y = (best.y + template_img.height() / 2) as i32;
         console_log!(
             "Icon found! {} matched at ({}, {}) with score {:.4} in {:.0} ms",
-            img_path,
+            template.name,
             center_x,
             center_y,
             best.score,
@@ -276,7 +268,7 @@ pub fn find_on_screen(img_path: &str, confidence: f32) -> Option<(i32, i32)> {
         console_log!(
             "Could not find the icon {} on the screen. \
              (Best score: {:.4}, needed: {:.2}; searched in {:.0} ms)",
-            img_path,
+            template.name,
             best.score,
             confidence,
             match_ms
@@ -286,8 +278,8 @@ pub fn find_on_screen(img_path: &str, confidence: f32) -> Option<(i32, i32)> {
 }
 
 /// Shorthand: locate a template with the default 0.8 confidence (matches PyAutoGUI default).
-pub fn find_img(img_path: &str) -> Option<(i32, i32)> {
-    find_on_screen(img_path, 0.8)
+pub fn find_img(template: &Template) -> Option<(i32, i32)> {
+    find_on_screen(template, 0.8)
 }
 
 /// Click on an image found on screen — equivalent of `pyautogui.click(locateCenterOnScreen(...))`.
@@ -295,17 +287,17 @@ pub fn find_img(img_path: &str) -> Option<(i32, i32)> {
 /// The 100 ms gap between the move and the press mirrors PyAutoGUI's global
 /// `PAUSE = 0.1`, which it inserts after the internal `moveTo` that `click()`
 /// performs. The trailing second matches the Python parent's `time.sleep(1)`.
-pub fn click_on_img(img_path: &str, enigo: &mut Enigo) {
-    match find_img(img_path) {
+pub fn click_on_img(template: &Template, enigo: &mut Enigo) {
+    match find_img(template) {
         Some((x, y)) => {
-            console_log!("Clicking on {}...", img_path);
+            console_log!("Clicking on {}...", template.name);
             let _ = enigo.move_mouse(x, y, Coordinate::Abs);
             thread::sleep(Duration::from_millis(100));
             let _ = enigo.button(Button::Left, enigo::Direction::Click);
             thread::sleep(Duration::from_secs(1));
         }
         None => {
-            console_log!("Could not locate the image on screen: {}", img_path);
+            console_log!("Could not locate the image on screen: {}", template.name);
         }
     }
 }
