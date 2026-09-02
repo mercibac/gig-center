@@ -60,9 +60,6 @@ replace `pyautogui.locateCenterOnScreen`, and `console.rs` replaces the
 
 ## Running
 
-Both versions expect the repository root as the working directory — that is where
-they look for `settings.json`, `ui/` and `assets/`.
-
 Python:
 
 ```bash
@@ -81,16 +78,28 @@ Tests for the Rust screen matcher:
 cargo test
 ```
 
+The Python entry point resolves `ui/`, `assets/` and `settings.json` relative to
+its own location, so it runs from any working directory. The Rust build reads
+`settings.json` from the working directory while the exe is still inside
+`target/`, which is what `cargo run` gives it.
+
 ## Packaging
 
-The Rust version builds to a single `target/release/gig-center.exe`. The UI, the
-icons and the screen-match templates are all compiled in, so it runs from
-anywhere with nothing beside it — it writes a default `settings.json` next to
-itself on first launch.
+Every build directory below is git-ignored, so packaging never shows up as a
+change.
 
-The Python version is packaged with PyInstaller or Nuitka; the exact commands,
-including every `--add-data` / `--include-data-files` path, are kept in
-[cmds.md](cmds.md).
+**Rust** — `cargo build --release` produces one self-contained
+`target/release/gig-center.exe`. The UI, the icons and the screen-match
+templates are compiled into it, so it runs from anywhere with nothing beside it
+and writes a default `settings.json` next to itself on first launch.
+
+**Python** — either PyInstaller (a single `dist/Gig Control Center.exe` that
+unpacks itself to a temp folder at launch) or Nuitka (a `main.dist/` folder
+holding the exe and its DLLs). Neither compiles resources in, so `ui/app.slint`,
+the `assets/` images and `settings.json` all have to be listed on the command
+line — miss one and the build only fails when you run it. The full commands are
+in [cmds.md](cmds.md); both need `--with` and `python -m` under uv, since
+neither packager is a project dependency.
 
 ## Settings
 
@@ -103,4 +112,8 @@ edits made in the app's settings dialog take effect immediately:
 | `hotspot_name` | SSID the PC switches to before launching anything |
 | `osc_file_path` | Open Stage Control preset to load |
 
-In a packaged build the file lives next to the `.exe` instead.
+A packaged build keeps its own copy next to the `.exe`. The Python builds ship
+the repository's `settings.json` inside the bundle and seed that copy from it —
+on a fresh install, and again if the file is ever corrupted — so an install
+starts with working values rather than placeholders. The Rust build carries no
+bundled copy and starts from its built-in defaults.
