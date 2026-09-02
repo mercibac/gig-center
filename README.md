@@ -50,7 +50,11 @@ gig-center/
 │
 ├── Cargo.toml, Cargo.lock   Rust manifest (must stay at the root)
 ├── pyproject.toml, uv.lock  Python dependencies
-└── cmds.md                  Recorded PyInstaller / Nuitka packaging commands
+├── cmds.md                  The build commands for both versions
+└── target/                  All build output, git-ignored
+    └── release/
+        ├── python/Gig Control Center.exe
+        └── rust/Gig Control Center.exe
 ```
 
 Most modules in `src-py/` have a same-named counterpart in `src-rs/`. The extras
@@ -80,26 +84,36 @@ cargo test
 
 The Python entry point resolves `ui/`, `assets/` and `settings.json` relative to
 its own location, so it runs from any working directory. The Rust build reads
-`settings.json` from the working directory while the exe is still inside
-`target/`, which is what `cargo run` gives it.
+`settings.json` from the working directory only when the exe sits directly in
+`target/debug` or `target/release`, which is what `cargo run` gives it —
+anywhere else, the shipped copy in `release/rust/` included, it keeps its
+settings beside the exe.
 
 ## Packaging
 
-Every build directory below is git-ignored, so packaging never shows up as a
-change.
+Both versions ship as `Gig Control Center.exe`, side by side under `target/`,
+which is git-ignored in full:
 
-**Rust** — `cargo build --release` produces one self-contained
-`target/release/gig-center.exe`. The UI, the icons and the screen-match
-templates are compiled into it, so it runs from anywhere with nothing beside it
-and writes a default `settings.json` next to itself on first launch.
+```
+target/release/python/Gig Control Center.exe    pyinstaller onefile, ~67 MB
+target/release/rust/Gig Control Center.exe      cargo release build, ~11 MB
+```
 
-**Python** — either PyInstaller (a single `dist/Gig Control Center.exe` that
-unpacks itself to a temp folder at launch) or Nuitka (a `main.dist/` folder
-holding the exe and its DLLs). Neither compiles resources in, so `ui/app.slint`,
-the `assets/` images and `settings.json` all have to be listed on the command
-line — miss one and the build only fails when you run it. The full commands are
-in [cmds.md](cmds.md); both need `--with` and `python -m` under uv, since
-neither packager is a project dependency.
+The exact commands are in [cmds.md](cmds.md). In short:
+
+**Rust** — `cargo build --release`, then copy the binary into `release/rust/`
+under the shipped name. Cargo cannot do either step itself: a bin target's name
+becomes the crate name, and rustc rejects spaces in it. The build is
+self-contained — the UI, the icons and the screen-match templates are compiled
+in — so the exe needs nothing beside it.
+
+**Python** — PyInstaller, one self-extracting file. Nothing is compiled in, so
+`ui/app.slint`, the `assets/` images and `settings.json` all have to be listed
+on the command line; miss one and the build only fails when you launch it. A
+Nuitka recipe is kept in cmds.md as an alternative, but PyInstaller is what
+produces the layout above.
+
+`cargo clean` empties `target/` entirely — the Python build with it.
 
 ## Settings
 
