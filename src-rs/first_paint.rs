@@ -114,11 +114,20 @@ impl CustomApplicationHandler for RevealOnFirstFrame {
         &mut self,
         _event_loop: &ActiveEventLoop,
         _window_id: WindowId,
-        _winit_window: Option<&slint::winit_030::winit::window::Window>,
+        winit_window: Option<&slint::winit_030::winit::window::Window>,
         _slint_window: Option<&slint::Window>,
         event: &WindowEvent,
     ) -> EventResult {
         if matches!(event, WindowEvent::RedrawRequested) {
+            // Centring lives here because this is the one place holding the
+            // winit window, and the last moment the window is still cloaked —
+            // moving it now is a move nobody sees. The size is final by the
+            // first frame; before it, there is nothing to centre.
+            if !self.drawn {
+                if let Some(window) = winit_window {
+                    crate::center::on_primary_monitor(window);
+                }
+            }
             self.drawn = true;
         }
         EventResult::Propagate

@@ -4,6 +4,7 @@
 mod console;
 mod app_icon;
 mod assets;
+mod center;
 mod connection;
 mod first_paint;
 mod gig_close;

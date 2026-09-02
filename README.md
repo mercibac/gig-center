@@ -30,7 +30,8 @@ gig-center/
 │   ├── snap.py              Window positioning
 │   ├── switch_defender.py   Toggles Defender real-time protection
 │   ├── switch_sleep.py      Toggles sleep and monitor timeouts
-│   └── window_icon.py       Title bar icon — the Python side of app_icon.rs
+│   └── window_setup.py      Title bar icon and centring — Win32, since Slint's
+│                            Python binding exposes neither
 │
 ├── src-rs/                  Rust version
 │   ├── build.rs             Compiles ui/app.slint, embeds assets/icon.ico, pre-scales the window icon
@@ -46,6 +47,7 @@ gig-center/
 │   ├── switch_defender.rs   Toggles Defender real-time protection
 │   ├── switch_sleep.rs      Toggles sleep and monitor timeouts
 │   ├── screen.rs, ncc.rs    Screen matching — finds a template image on screen and clicks it
+│   ├── center.rs            Centres the window on the primary monitor
 │   └── app_icon.rs, first_paint.rs, startup_probe.rs
 │                            Window icon, first-frame cloaking, startup instrumentation
 │

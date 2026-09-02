@@ -8,7 +8,7 @@ import datetime
 
 # Lightweight config import
 from utils import CONFIG_FILE, bundled_settings, ensure_settings_file, resource_path
-import window_icon
+import window_setup
 
 
 # --- Configuration Manager ---
@@ -100,7 +100,7 @@ class GigControlApp:
 
         # Held because dropping the timer would stop the retries before the
         # window winit creates has appeared.
-        self.icon_timer = window_icon.apply()
+        self.window_timer = window_setup.apply()
 
         # Connect UI Callbacks to Python functions
         self.app.launch_clicked = self.run_launch_script
