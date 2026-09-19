@@ -7,6 +7,22 @@ pub struct Settings {
     pub phone_name: String,
     pub hotspot_name: String,
     pub osc_file_path: String,
+    /// MIDI input to watch for the activity LED. Empty until one is chosen.
+    #[serde(default)]
+    pub midi_device: String,
+    /// Power the PC off once CLEAR DECK has finished.
+    #[serde(default)]
+    pub shutdown_after_clear: bool,
+    /// Whether LAUNCH and CLEAR DECK toggle Windows Defender at all.
+    /// Defaults to true so an existing settings.json, written before this
+    /// existed, keeps behaving as it always did.
+    #[serde(default = "enabled")]
+    pub manage_defender: bool,
+}
+
+/// serde needs a function for a non-false default.
+fn enabled() -> bool {
+    true
 }
 
 impl Default for Settings {
@@ -15,6 +31,9 @@ impl Default for Settings {
             phone_name: "SMART PHONE".to_string(),
             hotspot_name: "SHARED ACCESS POINT".to_string(),
             osc_file_path: String::new(),
+            midi_device: String::new(),
+            shutdown_after_clear: false,
+            manage_defender: true,
         }
     }
 }

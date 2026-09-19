@@ -50,6 +50,7 @@ gig-center/
 │   ├── switch_sleep.rs      Toggles sleep and monitor timeouts
 │   ├── screen.rs, ncc.rs    Screen matching — finds a template image on screen and clicks it
 │   ├── center.rs            Centres the window on the primary monitor
+│   ├── midi_input.rs        MIDI input watching, behind the activity LED
 │   └── app_icon.rs, first_paint.rs, startup_probe.rs
 │                            Window icon, first-frame cloaking, startup instrumentation
 │
@@ -61,6 +62,10 @@ gig-center/
         ├── python/Gig Control Center.exe
         └── rust/Gig Control Center.exe
 ```
+
+Both versions carry the same features: the MIDI activity LED and device
+picker, the Defender button that skips the `switch_defender` step, and the
+shutdown-after-CLEAR-DECK toggle.
 
 Most modules in `src-py/` have a same-named counterpart in `src-rs/`. The extras
 on the Rust side are things Python gets from its libraries: `screen.rs`/`ncc.rs`

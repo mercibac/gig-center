@@ -203,7 +203,11 @@ pub fn main(settings: Settings) {
         let target = &settings.hotspot_name;
 
         crate::switch_sleep::switch_sleep("off");
-        crate::switch_defender::switch_defender("off");
+        if settings.manage_defender {
+            crate::switch_defender::switch_defender("off");
+        } else {
+            console_log!("Skipping Windows Defender — the Defender button is off.");
+        }
         crate::utils::set_volume(90);
 
         let network_ready = crate::connection::ensure_correct_network(target);

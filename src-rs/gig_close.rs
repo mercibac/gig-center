@@ -1,3 +1,5 @@
+use std::os::windows::process::CommandExt;
+use std::process::Command;
 use std::thread;
 use std::time::Duration;
 use sysinfo::System;
@@ -5,6 +7,12 @@ use windows::Win32::Foundation::{BOOL, HWND, LPARAM, WPARAM};
 use windows::Win32::UI::WindowsAndMessaging::{
     EnumWindows, GetWindowTextW, IsWindowVisible, SendMessageW, WM_CLOSE,
 };
+
+/// Prevents a console window flashing up behind the shutdown command.
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+/// Gap between the last teardown step and the machine going down.
+const SHUTDOWN_DELAY: Duration = Duration::from_secs(2);
 
 pub fn force_kill(target_processes: &[&str]) {
     console_log!("--- Phase 1: Force Killing Gig Apps ---");
@@ -67,9 +75,30 @@ pub fn clear_the_deck(protected_titles: &[&str]) {
     }
 }
 
-pub fn main() {
+/// Power the machine off, after a short pause.
+///
+/// The pause sits between the last teardown step and the shutdown so the
+/// windows closing above have a moment to finish rather than being cut off.
+pub fn shutdown_pc(delay: Duration) {
+    console_log!("Shutting down the PC in {} seconds...", delay.as_secs());
+    thread::sleep(delay);
+
+    if let Err(e) = Command::new("shutdown")
+        .args(["/s", "/t", "0"])
+        .creation_flags(CREATE_NO_WINDOW)
+        .status()
+    {
+        console_log!("Could not shut down the PC: {}", e);
+    }
+}
+
+pub fn main(shutdown_after: bool, manage_defender: bool) {
     crate::switch_sleep::switch_sleep("on");
-    crate::switch_defender::switch_defender("on");
+    if manage_defender {
+        crate::switch_defender::switch_defender("on");
+    } else {
+        console_log!("Skipping Windows Defender — the Defender button is off.");
+    }
     crate::utils::set_volume(50);
 
     let apps_to_nuke = ["GigPerformer4.exe", "open-stage-control.exe"];
@@ -79,4 +108,9 @@ pub fn main() {
     clear_the_deck(&apps_to_protect);
 
     console_log!("\nDone! Gig apps are completely terminated, background windows are closed, and Firefox is safe.");
+
+    // Last thing, once every step above has finished.
+    if shutdown_after {
+        shutdown_pc(SHUTDOWN_DELAY);
+    }
 }
