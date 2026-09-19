@@ -86,13 +86,14 @@ export component MainWindow inherits Window {
         padding: 20px;
         spacing: 15px;
 
-        // 0. Status Row — MIDI activity on the left, shutdown toggle on the right
+        // 0. Status Row — MIDI activity left, shutdown toggle right, each
+        // centred in its own half rather than pinned to the window edge.
         HorizontalBox {
-            alignment: space-between;
             padding: 0px;
 
             HorizontalBox {
-                alignment: start;
+                horizontal-stretch: 1;
+                alignment: center;
                 spacing: 8px;
                 padding: 0px;
 
@@ -104,15 +105,22 @@ export component MainWindow inherits Window {
                     text: "MIDI";
                     color: #d4d4d4;
                     font-size: 14px;
+                    horizontal-alignment: center;
                     vertical-alignment: center;
                 }
             }
 
-            Switch {
-                text: "Shutdown after CLEAR DECK";
-                checked <=> root.shutdown-after-clear;
-                enabled: root.buttons-enabled && !root.show-settings;
-                toggled => { root.shutdown-toggled(self.checked); }
+            HorizontalBox {
+                horizontal-stretch: 1;
+                alignment: center;
+                padding: 0px;
+
+                Switch {
+                    text: "Shutdown";
+                    checked <=> root.shutdown-after-clear;
+                    enabled: root.buttons-enabled && !root.show-settings;
+                    toggled => { root.shutdown-toggled(self.checked); }
+                }
             }
         }
 

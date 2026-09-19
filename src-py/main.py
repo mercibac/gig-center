@@ -99,6 +99,9 @@ class GigControlApp:
         # After the redirector, so "Listening for MIDI on ..." shows up in the
         # on-screen console instead of a terminal nobody is watching.
         self.midi = midi_input.MidiListener()
+        # Set while Gig Performer owns the input; see release_midi.
+        self.midi_released = False
+        self._reacquire_midi_after = False
         self.refresh_midi_devices(announce=True)
 
         # Optimized timer: 100ms instead of 50ms reduces overhead
@@ -161,6 +164,12 @@ class GigControlApp:
         wanted = midi_input.choose_device(self.settings.get("midi_device", ""), devices)
         self.app.midi_device = wanted or ""
 
+        # Listing ports does not open them, so the dropdown above stays current
+        # even mid-gig. Opening one would take the device off Gig Performer,
+        # which is the whole thing release_midi exists to prevent.
+        if self.midi_released:
+            return
+
         if wanted != self.midi.device or announce:
             if wanted:
                 if self.midi.open(wanted):
@@ -168,6 +177,23 @@ class GigControlApp:
             else:
                 self.midi.close()
                 print("No MIDI device connected.")
+
+    def release_midi(self):
+        """Hand the MIDI input to Gig Performer.
+
+        Windows MIDI inputs are exclusive: while this app holds the port, Gig
+        Performer cannot open it. The released state is sticky so that opening
+        the settings modal mid-gig does not quietly take the device back.
+        """
+        self.midi_released = True
+        self.midi.close()
+        self.app.midi_active = False
+        print("MIDI released — Gig Performer now has the input.")
+
+    def acquire_midi(self):
+        """Take the MIDI input back, once Gig Performer is gone."""
+        self.midi_released = False
+        self.refresh_midi_devices(announce=True)
 
     # --- Button Logic ---
     def lock_buttons(self, status_text):
@@ -179,9 +205,20 @@ class GigControlApp:
         self.app.launch_text = "LAUNCH GIG RIG"
         self.app.clear_text = "CLEAR DECK"
         self.app.buttons_enabled = True
+
+        # CLEAR DECK kills Gig Performer, so the port is free again. Done here
+        # rather than in the worker thread because this runs on the UI thread,
+        # reached through the __UNLOCK__ sentinel that poll_console drains.
+        if self._reacquire_midi_after:
+            self._reacquire_midi_after = False
+            self.acquire_midi()
         print("\n--- SYSTEM READY ---")
 
     def run_launch_script(self):
+        # Before anything launches, so the port is free the moment Gig
+        # Performer looks for it.
+        self.release_midi()
+        self._reacquire_midi_after = False
         self.lock_buttons("INITIALIZING...")
         self.app.console_text = ""
         # Lazy import of heavy module
@@ -196,6 +233,7 @@ class GigControlApp:
         gig_launcher.main()
 
     def run_clear_script(self):
+        self._reacquire_midi_after = True
         self.lock_buttons("CLEARING...")
         self.app.console_text = ""
         # Lazy import of heavy module

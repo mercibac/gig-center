@@ -212,3 +212,100 @@ def test_saving_the_modal_preserves_settings_it_does_not_show(tmp_path, monkeypa
     assert saved["midi_device"] == "MPK mini 0"
     assert saved["shutdown_after_clear"] is True, "the toggle was lost on save"
     assert app.app.show_settings is False  # modal closes
+
+
+# ---------------------------------------------------------
+# MIDI ownership — the app must get out of Gig Performer's way
+# ---------------------------------------------------------
+class _FakeListener:
+    """Stands in for MidiListener: records opens and closes, no hardware."""
+
+    def __init__(self, device=None):
+        self.device = device
+        self.opened = []
+        self.closed = 0
+
+    def open(self, name):
+        self.opened.append(name)
+        self.device = name
+        return True
+
+    def close(self):
+        self.closed += 1
+        self.device = None
+
+
+class _FakeUi:
+    midi_active = True
+    midi_device = ""
+    midi_devices = None
+    launch_text = ""
+    clear_text = ""
+    buttons_enabled = False
+
+
+def _app(monkeypatch, listener, devices=("MPK mini 0",), released=False):
+    import main
+
+    monkeypatch.setattr(main.midi_input, "list_devices", lambda: list(devices))
+    app = object.__new__(main.GigControlApp)
+    app.app = _FakeUi()
+    app.midi = listener
+    app.midi_released = released
+    app._reacquire_midi_after = False
+    app.settings = {"midi_device": "MPK mini 0"}
+    return app
+
+
+def test_release_hands_the_port_over_and_darkens_the_led(monkeypatch):
+    listener = _FakeListener(device="MPK mini 0")
+    app = _app(monkeypatch, listener)
+
+    app.release_midi()
+
+    assert listener.closed == 1
+    assert app.midi_released is True
+    assert app.app.midi_active is False
+
+
+def test_refresh_does_not_steal_the_port_back_while_released(monkeypatch):
+    """Opening the settings modal mid-gig must not reopen the device."""
+    listener = _FakeListener()
+    app = _app(monkeypatch, listener, released=True)
+
+    app.refresh_midi_devices()
+
+    assert listener.opened == [], "settings grabbed MIDI back from Gig Performer"
+    assert app.app.midi_device == "MPK mini 0"  # dropdown still populated
+
+
+def test_refresh_opens_normally_when_not_released(monkeypatch):
+    listener = _FakeListener()
+    app = _app(monkeypatch, listener)
+
+    app.refresh_midi_devices()
+
+    assert listener.opened == ["MPK mini 0"]
+
+
+def test_clear_deck_takes_the_port_back(monkeypatch):
+    listener = _FakeListener()
+    app = _app(monkeypatch, listener, released=True)
+    app._reacquire_midi_after = True  # set by run_clear_script
+
+    app.unlock_buttons()
+
+    assert app.midi_released is False
+    assert listener.opened == ["MPK mini 0"]
+
+
+def test_launch_does_not_take_the_port_back(monkeypatch):
+    """After LAUNCH, unlocking the buttons must leave MIDI with Gig Performer."""
+    listener = _FakeListener()
+    app = _app(monkeypatch, listener, released=True)
+    app._reacquire_midi_after = False  # set by run_launch_script
+
+    app.unlock_buttons()
+
+    assert app.midi_released is True
+    assert listener.opened == []
