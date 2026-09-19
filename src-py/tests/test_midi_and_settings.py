@@ -416,3 +416,71 @@ def test_defaults_carry_the_defender_flag():
     import main
 
     assert main.DEFAULT_CONFIG["manage_defender"] is True
+
+
+# ---------------------------------------------------------
+# Saving with the controller unplugged must not forget it
+# ---------------------------------------------------------
+def test_saving_while_unplugged_keeps_the_remembered_device(tmp_path, monkeypatch):
+    """The dropdown reads empty when no controller is connected, so a Save of
+    unrelated settings used to overwrite the stored device name with "".
+
+    This bit for real: changing the hotspot name with the controller detached
+    silently lost 'Portable G-1 0' from settings.json.
+    """
+    import main
+
+    config = tmp_path / "settings.json"
+    monkeypatch.setattr(main, "CONFIG_FILE", str(config))
+
+    class UnpluggedUi:
+        midi_device = ""  # nothing connected, so the ComboBox is empty
+        show_settings = True
+
+    app = object.__new__(main.GigControlApp)
+    app.app = UnpluggedUi()
+    app.refresh_midi_devices = lambda: None
+    app.settings = {
+        "phone_name": "Phone",
+        "hotspot_name": "old hotspot",
+        "osc_file_path": "",
+        "midi_device": "Portable G-1 0",
+        "shutdown_after_clear": False,
+        "manage_defender": True,
+    }
+
+    app.update_settings("Phone", "NEW HOTSPOT", "")
+
+    saved = json.loads(config.read_text())
+    assert saved["hotspot_name"] == "NEW HOTSPOT"
+    assert saved["midi_device"] == "Portable G-1 0", (
+        "saving with the controller unplugged wiped the remembered device"
+    )
+
+
+def test_selecting_a_device_still_overwrites_the_stored_one(tmp_path, monkeypatch):
+    """The fallback must not pin the old value: picking a different device in
+    the dropdown has to win."""
+    import main
+
+    config = tmp_path / "settings.json"
+    monkeypatch.setattr(main, "CONFIG_FILE", str(config))
+
+    class PluggedUi:
+        midi_device = "Launchkey 49 MIDI"
+        show_settings = True
+
+    app = object.__new__(main.GigControlApp)
+    app.app = PluggedUi()
+    app.refresh_midi_devices = lambda: None
+    app.settings = {
+        "phone_name": "Phone",
+        "hotspot_name": "Hotspot",
+        "osc_file_path": "",
+        "midi_device": "Portable G-1 0",
+    }
+
+    app.update_settings("Phone", "Hotspot", "")
+
+    saved = json.loads(config.read_text())
+    assert saved["midi_device"] == "Launchkey 49 MIDI"

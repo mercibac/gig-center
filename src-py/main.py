@@ -261,12 +261,18 @@ class GigControlApp:
 
         # Updated in place rather than rebuilt: a fresh dict here would drop
         # midi_device and shutdown_after_clear on every save.
+        #
+        # The device falls back to the stored name because the dropdown reads
+        # empty whenever the controller is unplugged. Taking it at face value
+        # meant saving any unrelated setting with the controller detached threw
+        # the remembered device away.
         self.settings.update(
             {
                 "phone_name": phone.strip(),
                 "hotspot_name": hotspot.strip(),
                 "osc_file_path": path.strip(),
-                "midi_device": self.app.midi_device,
+                "midi_device": self.app.midi_device
+                or self.settings.get("midi_device", ""),
             }
         )
 
