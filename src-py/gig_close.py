@@ -67,9 +67,12 @@ def shutdown_pc(delay_seconds=2):
         print(f"Could not shut down the PC: {e}")
 
 
-def main(shutdown_after=False):
+def main(shutdown_after=False, manage_defender=True):
     switch_sleep("on")
-    switch_defender("on")
+    if manage_defender:
+        switch_defender("on")
+    else:
+        print("Skipping Windows Defender — the Defender button is off.")
     set_volume(50)
     # 1. Put the exact .exe names here for the apps that MUST die
     apps_to_nuke = ["GigPerformer4.exe", "open-stage-control.exe"]

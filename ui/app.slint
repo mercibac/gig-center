@@ -46,6 +46,45 @@ component MidiLed inherits Rectangle {
 }
 
 // ==========================================
+// DEFENDER TOGGLE BUTTON
+// ==========================================
+// The shield is drawn rather than loaded: the assets/defender_*.png files are
+// screen-match templates (screenshots of the Defender UI), not icons, and a
+// vector needs no file bundling into the packaged build.
+component DefenderButton inherits Rectangle {
+    in property <bool> active: false;
+    in property <bool> btn-enabled: true;
+    callback clicked();
+
+    width: 46px;
+    height: 34px;
+    border-radius: 4px;
+    border-width: 1px;
+    background: root.active ? #2f3f34 : #333333;
+    border-color: root.active ? #3ddc63 : #4a4a4a;
+
+    animate background, border-color { duration: 120ms; }
+
+    Path {
+        width: 20px;
+        height: 20px;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        viewbox-width: 24;
+        viewbox-height: 24;
+        // A shield: flat top, shoulders, tapering to a point.
+        commands: "M 12 2 L 20.5 5.5 L 20.5 11.5 C 20.5 16.5 16.8 20.7 12 22 C 7.2 20.7 3.5 16.5 3.5 11.5 L 3.5 5.5 Z";
+        fill: root.active ? #3ddc63 : #6a6a6a;
+        animate fill { duration: 120ms; }
+    }
+
+    TouchArea {
+        enabled: root.btn-enabled;
+        clicked => { root.clicked(); }
+    }
+}
+
+// ==========================================
 // MAIN APPLICATION WINDOW
 // ==========================================
 export component MainWindow inherits Window {
@@ -65,6 +104,7 @@ export component MainWindow inherits Window {
     in property <[string]> midi-devices: [];
     in-out property <string> midi-device: "";
     in-out property <bool> shutdown-after-clear: false;
+    in-out property <bool> manage-defender: true;
 
     // --- Modal State ---
     in-out property <bool> show-settings: false;
@@ -77,6 +117,7 @@ export component MainWindow inherits Window {
     callback clear-clicked();
     callback save-clicked(string, string, string);
     callback shutdown-toggled(bool);
+    callback defender-toggled(bool);
     callback settings-opened();
 
     // ==========================================
@@ -107,6 +148,22 @@ export component MainWindow inherits Window {
                     font-size: 14px;
                     horizontal-alignment: center;
                     vertical-alignment: center;
+                }
+            }
+
+            HorizontalBox {
+                horizontal-stretch: 1;
+                alignment: center;
+                padding: 0px;
+
+                DefenderButton {
+                    active: root.manage-defender;
+                    btn-enabled: root.buttons-enabled && !root.show-settings;
+                    y: (parent.height - self.height) / 2;
+                    clicked => {
+                        root.manage-defender = !root.manage-defender;
+                        root.defender-toggled(root.manage-defender);
+                    }
                 }
             }
 

@@ -178,7 +178,7 @@ def launch_programs(phone_name):
 
 
 @time_it
-def main():
+def main(manage_defender=True):
     # ---------------------------------------------------------
     # 0. Load fresh settings every time (so UI changes apply immediately)
     # ---------------------------------------------------------
@@ -189,7 +189,10 @@ def main():
     # 1. Change PC sleep settings and deactivate the antivirus
     # ---------------------------------------------------------
     switch_sleep("off")
-    switch_defender("off")
+    if manage_defender:
+        switch_defender("off")
+    else:
+        print("Skipping Windows Defender — the Defender button is off.")
     set_volume(90)
 
     # ---------------------------------------------------------

@@ -19,6 +19,7 @@ DEFAULT_CONFIG = {
     "osc_file_path": "",
     "midi_device": "",
     "shutdown_after_clear": False,
+    "manage_defender": True,
 }
 
 
@@ -90,6 +91,7 @@ class GigControlApp:
         self.app.shutdown_after_clear = bool(
             self.settings.get("shutdown_after_clear", False)
         )
+        self.app.manage_defender = bool(self.settings.get("manage_defender", True))
 
         self.app.console_text = "System initialized. Awaiting command...\n"
 
@@ -130,6 +132,7 @@ class GigControlApp:
         self.app.clear_clicked = self.run_clear_script
         self.app.save_clicked = self.update_settings
         self.app.shutdown_toggled = self.update_shutdown_option
+        self.app.defender_toggled = self.update_defender_option
         self.app.settings_opened = self.refresh_midi_devices
 
     def poll_console(self):
@@ -223,7 +226,7 @@ class GigControlApp:
         """Lazy load and execute gig_launcher module"""
         import gig_launcher  # Heavy module imported only when needed
 
-        gig_launcher.main()
+        gig_launcher.main(manage_defender=bool(self.settings.get("manage_defender", True)))
 
     def run_clear_script(self):
         self.lock_buttons("CLEARING...")
@@ -237,7 +240,10 @@ class GigControlApp:
         """Lazy load and execute gig_close module"""
         import gig_close  # Heavy module imported only when needed
 
-        gig_close.main(shutdown_after=bool(self.settings.get("shutdown_after_clear")))
+        gig_close.main(
+            shutdown_after=bool(self.settings.get("shutdown_after_clear")),
+            manage_defender=bool(self.settings.get("manage_defender", True)),
+        )
 
     def execute_module(self, target_function):
         try:
@@ -280,6 +286,18 @@ class GigControlApp:
         print(
             "Shutdown after CLEAR DECK: "
             + ("ON — the PC will power off." if enabled else "off.")
+        )
+
+    def update_defender_option(self, enabled):
+        """Persist the Defender button the moment it is pressed — it lives on the
+        main screen, so there is no Save button to carry it."""
+        self.settings["manage_defender"] = bool(enabled)
+        save_settings(self.settings)
+        print()
+        print(
+            "Windows Defender step: "
+            + ("ON — LAUNCH and CLEAR DECK will toggle it."
+               if enabled else "off — both will skip it.")
         )
 
     def run(self):

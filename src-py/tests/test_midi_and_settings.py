@@ -203,6 +203,7 @@ def test_saving_the_modal_preserves_settings_it_does_not_show(tmp_path, monkeypa
         "osc_file_path": "",
         "midi_device": "MPK mini 0",
         "shutdown_after_clear": True,
+        "manage_defender": False,
     }
 
     app.update_settings("New Phone", "New Hotspot", "C:/preset.json")
@@ -211,6 +212,7 @@ def test_saving_the_modal_preserves_settings_it_does_not_show(tmp_path, monkeypa
     assert saved["phone_name"] == "New Phone"
     assert saved["midi_device"] == "MPK mini 0"
     assert saved["shutdown_after_clear"] is True, "the toggle was lost on save"
+    assert saved["manage_defender"] is False, "the Defender button was lost on save"
     assert app.app.show_settings is False  # modal closes
 
 
@@ -332,3 +334,85 @@ def test_window_setup_leaves_the_shared_user32_alone():
         "window_setup configured the shared ctypes.windll.user32; "
         "it must use its own ctypes.WinDLL handle"
     )
+
+
+# ---------------------------------------------------------
+# Defender button — it must actually skip the step, not just look off
+# ---------------------------------------------------------
+def _stub_launcher(monkeypatch, calls):
+    """Stub every destructive step in gig_launcher.main.
+
+    ensure_correct_network returns False so main stops right after the Defender
+    step, which is all this needs to observe — nothing launches or moves windows.
+    """
+    import gig_launcher
+
+    monkeypatch.setattr(
+        gig_launcher, "load_config", lambda: {"hotspot_name": "hotspot"}
+    )
+    for name in ("switch_sleep", "switch_defender", "set_volume"):
+        monkeypatch.setattr(
+            gig_launcher, name, lambda *a, _n=name, **kw: calls.append(_n)
+        )
+    monkeypatch.setattr(
+        gig_launcher.connection, "ensure_correct_network", lambda target: False
+    )
+    return gig_launcher
+
+
+def test_clear_deck_skips_defender_when_the_button_is_off(monkeypatch):
+    calls = []
+    gig_close = _stub_clear_deck(monkeypatch, calls)
+
+    gig_close.main(manage_defender=False)
+
+    assert "switch_defender" not in calls
+    # the rest of the teardown still runs
+    assert "switch_sleep" in calls and "clear_the_deck" in calls
+
+
+def test_clear_deck_touches_defender_when_the_button_is_on(monkeypatch):
+    calls = []
+    gig_close = _stub_clear_deck(monkeypatch, calls)
+
+    gig_close.main(manage_defender=True)
+
+    assert "switch_defender" in calls
+
+
+def test_launch_skips_defender_when_the_button_is_off(monkeypatch):
+    calls = []
+    gig_launcher = _stub_launcher(monkeypatch, calls)
+
+    gig_launcher.main(manage_defender=False)
+
+    assert "switch_defender" not in calls
+    assert "switch_sleep" in calls and "set_volume" in calls
+
+
+def test_launch_touches_defender_when_the_button_is_on(monkeypatch):
+    calls = []
+    gig_launcher = _stub_launcher(monkeypatch, calls)
+
+    gig_launcher.main(manage_defender=True)
+
+    assert "switch_defender" in calls
+
+
+def test_both_entry_points_default_to_managing_defender(monkeypatch):
+    """Running either module standalone must behave as it always has."""
+    calls = []
+    gig_close = _stub_clear_deck(monkeypatch, calls)
+    gig_close.main()
+    assert "switch_defender" in calls
+
+    calls.clear()
+    gig_launcher = _stub_launcher(monkeypatch, calls)
+    gig_launcher.main()
+    assert "switch_defender" in calls
+
+
+def test_defaults_carry_the_defender_flag():
+    import main
+
+    assert main.DEFAULT_CONFIG["manage_defender"] is True
