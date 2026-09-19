@@ -138,7 +138,7 @@ fn launch_programs(settings: &Settings) {
         .args(["/C", "start", "", osc_path])
         .spawn();
 
-    thread::sleep(Duration::from_secs(5));
+    thread::sleep(Duration::from_secs(12));
 
     let ip_address = get_wifi_ip().unwrap_or_else(|| {
         console_log!("Could not find Wi-Fi IP address. Defaulting to localhost.");
@@ -214,7 +214,9 @@ pub fn main(settings: Settings) {
             );
             launch_programs(&settings);
             thread::sleep(Duration::from_secs(10));
-            crate::snap::snap_gig_windows();
+            crate::snap::snap_gig_windows("GigPerformer-PA-FULL");
+            thread::sleep(Duration::from_secs(20));
+            crate::snap::snap_gig_windows("Keyboard_Live");
         } else {
             console_log!("\nPlease check your phone hotspot and try again.");
         }

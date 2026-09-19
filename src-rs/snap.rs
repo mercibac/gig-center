@@ -8,8 +8,8 @@ use windows::Win32::UI::WindowsAndMessaging::{
 
 /// Snap gig windows into left/right split positions.
 /// Open Stage Control → left half, Gig Performer → right half.
-pub fn snap_gig_windows() {
-    thread::sleep(Duration::from_secs(30));
+pub fn snap_gig_windows(option: &str) {
+    // thread::sleep(Duration::from_secs(30));
     console_log!("Snapping windows into position...");
 
     // Give apps time to register their windows with the OS
@@ -32,7 +32,7 @@ pub fn snap_gig_windows() {
     }
 
     // Snap Gig Performer to the right half
-    if let Some(hwnd) = find_window_by_title("Keyboard_Live") {
+    if let Some(hwnd) = find_window_by_title(option) {
         unsafe {
             let _ = ShowWindow(hwnd, SW_RESTORE);
             let _ = MoveWindow(hwnd, half_width, 0, half_width, screen_height, BOOL(1));

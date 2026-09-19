@@ -137,8 +137,9 @@ def launch_programs(phone_name):
     print("Launching Open Stage Control...")
     os.system(f'start "" "{osc_path}"')
 
-    # Wait for Open Stage Control's UI to fully load
-    time.sleep(5)
+    # Wait for Open Stage Control's server to be up and its UI loaded — the
+    # clipboard and keyboard work below all land on that window.
+    time.sleep(12)
 
     # ---------------------------------------------------------
     # 3. Grab IP and Format it
@@ -202,7 +203,11 @@ def main():
         )
         launch_programs(config["phone_name"])
         time.sleep(10)
-        snap.snap_gig_windows()
+        # Gig Performer renames its window as it loads, so snap twice: once for
+        # the title it carries on the way up, once for the loaded gig file.
+        snap.snap_gig_windows("GigPerformer-PA-FULL")
+        time.sleep(20)
+        snap.snap_gig_windows("Keyboard_Live")
     else:
         print("\nPlease check your phone hotspot and try again.")
 

@@ -3,8 +3,13 @@ import pyautogui
 import time
 
 
-def snap_gig_windows():
-    time.sleep(30)
+def snap_gig_windows(option):
+    """Snap gig windows into left/right split positions.
+
+    Open Stage Control goes left, Gig Performer right. `option` is the title to
+    look for on the right: Gig Performer renames its window as it loads, so the
+    caller says which stage it expects to find, and decides when to call.
+    """
     print("Snapping windows into position...")
 
     # 1. Get your exact screen dimensions dynamically
@@ -35,7 +40,7 @@ def snap_gig_windows():
     # ---------------------------------------------------------
     # 3. Anchor Gig Performer to the Right
     # ---------------------------------------------------------
-    gp_windows = gw.getWindowsWithTitle("Keyboard_Live")
+    gp_windows = gw.getWindowsWithTitle(option)
 
     if gp_windows:
         gp_win = gp_windows[0]
@@ -52,4 +57,4 @@ def snap_gig_windows():
 
 
 if __name__ == "__main__":
-    snap_gig_windows()
+    snap_gig_windows("Keyboard_Live")
