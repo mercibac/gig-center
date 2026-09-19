@@ -56,8 +56,8 @@ component DefenderButton inherits Rectangle {
     in property <bool> btn-enabled: true;
     callback clicked();
 
-    width: 46px;
-    height: 34px;
+    width: 40px;
+    height: 30px;
     border-radius: 4px;
     border-width: 1px;
     background: root.active ? #2f3f34 : #333333;
@@ -127,16 +127,21 @@ export component MainWindow inherits Window {
         padding: 20px;
         spacing: 15px;
 
-        // 0. Status Row — MIDI activity left, shutdown toggle right, each
-        // centred in its own half rather than pinned to the window edge.
-        HorizontalBox {
-            padding: 0px;
+        // 0. Status Row — on the same grid as everything below: MIDI flush
+        // left, Defender on the window centre, Shutdown flush right.
+        //
+        // HorizontalLayout, not HorizontalBox: the latter adds theme padding
+        // that insets whatever is nested in it. The outer columns are a fixed,
+        // equal width because horizontal-stretch only shares out *surplus*
+        // space — with stretch alone the wider Shutdown column stole width and
+        // dragged the middle column, and the Defender button, off centre.
+        HorizontalLayout {
+            height: 36px;
 
-            HorizontalBox {
-                horizontal-stretch: 1;
-                alignment: center;
+            HorizontalLayout {
+                width: 220px;
+                alignment: start;
                 spacing: 8px;
-                padding: 0px;
 
                 MidiLed {
                     lit: root.midi-active;
@@ -146,15 +151,13 @@ export component MainWindow inherits Window {
                     text: "MIDI";
                     color: #d4d4d4;
                     font-size: 14px;
-                    horizontal-alignment: center;
                     vertical-alignment: center;
                 }
             }
 
-            HorizontalBox {
+            HorizontalLayout {
                 horizontal-stretch: 1;
                 alignment: center;
-                padding: 0px;
 
                 DefenderButton {
                     active: root.manage-defender;
@@ -167,22 +170,22 @@ export component MainWindow inherits Window {
                 }
             }
 
-            HorizontalBox {
-                horizontal-stretch: 1;
-                alignment: center;
-                padding: 0px;
+            HorizontalLayout {
+                width: 220px;
+                alignment: end;
 
                 Switch {
                     text: "Shutdown";
                     checked <=> root.shutdown-after-clear;
                     enabled: root.buttons-enabled && !root.show-settings;
+                    y: (parent.height - self.height) / 2;
                     toggled => { root.shutdown-toggled(self.checked); }
                 }
             }
         }
 
         // 1. Top Button Frame
-        HorizontalBox {
+        HorizontalLayout {
             spacing: 10px;
             alignment: center;
 
@@ -234,7 +237,7 @@ export component MainWindow inherits Window {
         }
 
         // 3. Bottom Settings Button
-        HorizontalBox {
+        HorizontalLayout {
             alignment: end;
             DarkButton {
                 btn-text: "⚙ Settings";
