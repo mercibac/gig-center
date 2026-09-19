@@ -252,7 +252,6 @@ def _app(monkeypatch, listener, devices=("MPK mini 0",), released=False):
     app.app = _FakeUi()
     app.midi = listener
     app.midi_released = released
-    app._reacquire_midi_after = False
     app.settings = {"midi_device": "MPK mini 0"}
     return app
 
@@ -288,24 +287,26 @@ def test_refresh_opens_normally_when_not_released(monkeypatch):
     assert listener.opened == ["MPK mini 0"]
 
 
-def test_clear_deck_takes_the_port_back(monkeypatch):
+def test_nothing_takes_the_port_back_once_released(monkeypatch):
+    """Released is for the rest of the session: finishing CLEAR DECK, or any
+    other unlock, must leave the device with Gig Performer. Only a restart
+    starts listening again."""
     listener = _FakeListener()
     app = _app(monkeypatch, listener, released=True)
-    app._reacquire_midi_after = True  # set by run_clear_script
-
-    app.unlock_buttons()
-
-    assert app.midi_released is False
-    assert listener.opened == ["MPK mini 0"]
-
-
-def test_launch_does_not_take_the_port_back(monkeypatch):
-    """After LAUNCH, unlocking the buttons must leave MIDI with Gig Performer."""
-    listener = _FakeListener()
-    app = _app(monkeypatch, listener, released=True)
-    app._reacquire_midi_after = False  # set by run_launch_script
 
     app.unlock_buttons()
 
     assert app.midi_released is True
     assert listener.opened == []
+
+
+def test_release_survives_reopening_settings(monkeypatch):
+    """The one path that could quietly reclaim the device."""
+    listener = _FakeListener()
+    app = _app(monkeypatch, listener, released=True)
+
+    app.refresh_midi_devices()   # what opening the settings modal does
+    app.unlock_buttons()         # what finishing CLEAR DECK does
+
+    assert listener.opened == []
+    assert app.midi_released is True

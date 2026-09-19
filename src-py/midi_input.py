@@ -63,7 +63,9 @@ class MidiListener:
     def open(self, device_name):
         """Listen on the named port. Returns whether it opened.
 
-        Closes any port already open, so this doubles as "switch to".
+        Closes any port already open, so this doubles as "switch to". Whether a
+        second program can open the same device at the same time is up to the
+        driver — the Portable G-1 allows it, others do not.
         """
         self.close()
         if not device_name:
