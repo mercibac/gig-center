@@ -14,6 +14,20 @@ target/
 All of `target/` is git-ignored. Note that `cargo clean` empties the whole tree,
 the Python build included.
 
+## Tests
+
+```bash
+uv run --with pytest pytest src-py/tests
+```
+
+Covers the MIDI device fallback, the activity filter behind the LED, the
+settings round-trip, and the CLEAR DECK shutdown ordering. Every destructive
+step is stubbed, so the suite never kills an app or powers the machine off.
+
+```bash
+cargo test
+```
+
 ## Rust — cargo
 
 ```bash

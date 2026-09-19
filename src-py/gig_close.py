@@ -1,5 +1,6 @@
 import psutil
 import pygetwindow as gw
+import subprocess
 import time
 from switch_defender import switch_defender
 from switch_sleep import switch_sleep
@@ -48,7 +49,25 @@ def clear_the_deck(protected_titles):
                     print(f"  -> Could not close '{win.title}'. Error: {e}")
 
 
-def main():
+def shutdown_pc(delay_seconds=2):
+    """Power the machine off, after a short pause.
+
+    The pause sits between the last teardown step and the shutdown so the
+    windows closing above have a moment to finish rather than being cut off.
+    """
+    print(f"Shutting down the PC in {delay_seconds} seconds...")
+    time.sleep(delay_seconds)
+    try:
+        subprocess.run(
+            ["shutdown", "/s", "/t", "0"],
+            check=True,
+            capture_output=True,
+        )
+    except Exception as e:
+        print(f"Could not shut down the PC: {e}")
+
+
+def main(shutdown_after=False):
     switch_sleep("on")
     switch_defender("on")
     set_volume(50)
@@ -64,6 +83,10 @@ def main():
     print(
         "\nDone! Gig apps are completely terminated, background windows are closed, and Firefox is safe."
     )
+
+    # Last thing, once every step above has finished.
+    if shutdown_after:
+        shutdown_pc()
 
 
 if __name__ == "__main__":

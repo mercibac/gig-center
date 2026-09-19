@@ -1,4 +1,4 @@
-import { LineEdit, VerticalBox, ScrollView, HorizontalBox } from "std-widgets.slint";
+import { LineEdit, VerticalBox, ScrollView, HorizontalBox, ComboBox, Switch } from "std-widgets.slint";
 
 // ==========================================
 // CUSTOM BUTTON COMPONENT (Optimized)
@@ -29,6 +29,23 @@ component DarkButton inherits Rectangle {
 }
 
 // ==========================================
+// MIDI ACTIVITY LED
+// ==========================================
+component MidiLed inherits Rectangle {
+    in property <bool> lit: false;
+
+    width: 16px;
+    height: 16px;
+    border-radius: 8px;
+    border-width: 1px;
+    border-color: #111111;
+    background: root.lit ? #3ddc63 : #3a3a3a;
+
+    // Without the fade a single note is one frame long and easy to miss.
+    animate background { duration: 120ms; }
+}
+
+// ==========================================
 // MAIN APPLICATION WINDOW
 // ==========================================
 export component MainWindow inherits Window {
@@ -43,6 +60,12 @@ export component MainWindow inherits Window {
     in-out property <string> console-text: "";
     in-out property <bool> buttons-enabled: true;
     
+    // --- MIDI + Shutdown State ---
+    in property <bool> midi-active: false;
+    in property <[string]> midi-devices: [];
+    in-out property <string> midi-device: "";
+    in-out property <bool> shutdown-after-clear: false;
+
     // --- Modal State ---
     in-out property <bool> show-settings: false;
     in-out property <string> phone-name: "";
@@ -53,6 +76,8 @@ export component MainWindow inherits Window {
     callback launch-clicked();
     callback clear-clicked();
     callback save-clicked(string, string, string);
+    callback shutdown-toggled(bool);
+    callback settings-opened();
 
     // ==========================================
     // MAIN UI LAYER
@@ -60,6 +85,36 @@ export component MainWindow inherits Window {
     VerticalBox {
         padding: 20px;
         spacing: 15px;
+
+        // 0. Status Row — MIDI activity on the left, shutdown toggle on the right
+        HorizontalBox {
+            alignment: space-between;
+            padding: 0px;
+
+            HorizontalBox {
+                alignment: start;
+                spacing: 8px;
+                padding: 0px;
+
+                MidiLed {
+                    lit: root.midi-active;
+                    y: (parent.height - self.height) / 2;
+                }
+                Text {
+                    text: "MIDI";
+                    color: #d4d4d4;
+                    font-size: 14px;
+                    vertical-alignment: center;
+                }
+            }
+
+            Switch {
+                text: "Shutdown after CLEAR DECK";
+                checked <=> root.shutdown-after-clear;
+                enabled: root.buttons-enabled && !root.show-settings;
+                toggled => { root.shutdown-toggled(self.checked); }
+            }
+        }
 
         // 1. Top Button Frame
         HorizontalBox {
@@ -121,7 +176,10 @@ export component MainWindow inherits Window {
                 height: 50px;
                 min-width: 130px;
                 btn-enabled: root.buttons-enabled && !root.show-settings;
-                clicked => { root.show-settings = true; }
+                clicked => {
+                    root.settings-opened();
+                    root.show-settings = true;
+                }
             }
         }
     }
@@ -143,7 +201,10 @@ export component MainWindow inherits Window {
         // Settings box
         Rectangle {
             width: 650px;
-            height: 300px;
+            // Grew with the MIDI row: each settings row costs ~85px once the
+            // HorizontalBox padding is counted, and the buttons spilled out
+            // below the box at 360px.
+            height: 500px;
             background: #2b2b2b;
             border-radius: 8px;
             border-width: 1px;
@@ -185,6 +246,18 @@ export component MainWindow inherits Window {
                     spacing: 20px;
                     Text { text: "OSC File Path:"; color: #d4d4d4; vertical-alignment: center; min-width: 220px; }
                     osc_input := LineEdit { text: root.osc-path; horizontal-stretch: 1; }
+                }
+
+                HorizontalBox {
+                    alignment: center;
+                    spacing: 20px;
+                    Text { text: "MIDI Device:"; color: #d4d4d4; vertical-alignment: center; min-width: 220px; }
+                    ComboBox {
+                        model: root.midi-devices;
+                        current-value: root.midi-device;
+                        horizontal-stretch: 1;
+                        selected(value) => { root.midi-device = value; }
+                    }
                 }
 
                 HorizontalBox {

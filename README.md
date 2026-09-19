@@ -30,8 +30,10 @@ gig-center/
 │   ├── snap.py              Window positioning
 │   ├── switch_defender.py   Toggles Defender real-time protection
 │   ├── switch_sleep.py      Toggles sleep and monitor timeouts
-│   └── window_setup.py      Title bar icon and centring — Win32, since Slint's
-│                            Python binding exposes neither
+│   ├── midi_input.py        MIDI input watching, behind the activity LED
+│   ├── window_setup.py      Title bar icon and centring — Win32, since Slint's
+│   │                        Python binding exposes neither
+│   └── tests/               pytest suite (see cmds.md)
 │
 ├── src-rs/                  Rust version
 │   ├── build.rs             Compiles ui/app.slint, embeds assets/icon.ico, pre-scales the window icon
@@ -128,6 +130,8 @@ edits made in the app's settings dialog take effect immediately:
 | `phone_name` | KDE Connect device name of the phone, used to send it the OSC url |
 | `hotspot_name` | SSID the PC switches to before launching anything |
 | `osc_file_path` | Open Stage Control preset to load |
+| `midi_device` | MIDI input to watch; falls back to the first connected device when absent |
+| `shutdown_after_clear` | Power the PC off 2s after CLEAR DECK finishes (default off) |
 
 A packaged build keeps its own copy next to the `.exe`. The Python builds ship
 the repository's `settings.json` inside the bundle and seed that copy from it —

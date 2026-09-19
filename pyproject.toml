@@ -11,5 +11,6 @@ dependencies = [
     "pyperclip>=1.11.0",
     "pyscreeze>=1.0.1",
     "python-dotenv>=1.2.2",
+    "python-rtmidi>=1.5",
     "slint>=1.17.1b2",
 ]

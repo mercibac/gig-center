@@ -8,6 +8,7 @@ import datetime
 
 # Lightweight config import
 from utils import CONFIG_FILE, bundled_settings, ensure_settings_file, resource_path
+import midi_input
 import window_setup
 
 
@@ -16,6 +17,8 @@ DEFAULT_CONFIG = {
     "phone_name": "SMART PHONE",
     "hotspot_name": "SHARED ACCESS POINT",
     "osc_file_path": "",
+    "midi_device": "",
+    "shutdown_after_clear": False,
 }
 
 
@@ -84,11 +87,19 @@ class GigControlApp:
         self.app.phone_name = self.settings.get("phone_name", "")
         self.app.hotspot_name = self.settings.get("hotspot_name", "")
         self.app.osc_path = self.settings.get("osc_file_path", "")
+        self.app.shutdown_after_clear = bool(
+            self.settings.get("shutdown_after_clear", False)
+        )
 
         self.app.console_text = "System initialized. Awaiting command...\n"
 
         sys.stdout = ConsoleRedirector()
         sys.stderr = ConsoleRedirector()
+
+        # After the redirector, so "Listening for MIDI on ..." shows up in the
+        # on-screen console instead of a terminal nobody is watching.
+        self.midi = midi_input.MidiListener()
+        self.refresh_midi_devices(announce=True)
 
         # Optimized timer: 100ms instead of 50ms reduces overhead
         self.console_timer = slint.Timer()
@@ -96,6 +107,16 @@ class GigControlApp:
             slint.TimerMode.Repeated,
             datetime.timedelta(milliseconds=100),  # Reduced from 50ms to 100ms
             self.poll_console,
+        )
+
+        # Faster than the console timer: the LED is a flicker, not a readout.
+        # rtmidi's callback runs on its own thread, so polling from a Slint
+        # timer is what keeps the UI property on the UI thread.
+        self.midi_timer = slint.Timer()
+        self.midi_timer.start(
+            slint.TimerMode.Repeated,
+            datetime.timedelta(milliseconds=40),
+            self.poll_midi,
         )
 
         # Held because dropping the timer would stop the retries before the
@@ -106,6 +127,8 @@ class GigControlApp:
         self.app.launch_clicked = self.run_launch_script
         self.app.clear_clicked = self.run_clear_script
         self.app.save_clicked = self.update_settings
+        self.app.shutdown_toggled = self.update_shutdown_option
+        self.app.settings_opened = self.refresh_midi_devices
 
     def poll_console(self):
         texts = []
@@ -118,6 +141,33 @@ class GigControlApp:
 
         if texts:
             self.app.console_text += "".join(texts)
+
+    def poll_midi(self):
+        self.app.midi_active = self.midi.is_active()
+
+    # --- MIDI Logic ---
+    def refresh_midi_devices(self, announce=False):
+        """Re-read the connected devices and (re)open the one to listen on.
+
+        Runs at startup and every time the settings modal opens, so a controller
+        plugged in mid-session shows up without a restart. Reports only when
+        something changed, so reopening settings does not spam the console —
+        except at startup, where `announce` forces one line so the state is
+        never a mystery.
+        """
+        devices = midi_input.list_devices()
+        self.app.midi_devices = slint.ListModel(devices)
+
+        wanted = midi_input.choose_device(self.settings.get("midi_device", ""), devices)
+        self.app.midi_device = wanted or ""
+
+        if wanted != self.midi.device or announce:
+            if wanted:
+                if self.midi.open(wanted):
+                    print(f"Listening for MIDI on '{wanted}'.")
+            else:
+                self.midi.close()
+                print("No MIDI device connected.")
 
     # --- Button Logic ---
     def lock_buttons(self, status_text):
@@ -157,7 +207,7 @@ class GigControlApp:
         """Lazy load and execute gig_close module"""
         import gig_close  # Heavy module imported only when needed
 
-        gig_close.main()
+        gig_close.main(shutdown_after=bool(self.settings.get("shutdown_after_clear")))
 
     def execute_module(self, target_function):
         try:
@@ -173,17 +223,34 @@ class GigControlApp:
             print("Warning: Phone Name and Hotspot Name are mandatory.")
             return
 
-        self.settings = {
-            "phone_name": phone.strip(),
-            "hotspot_name": hotspot.strip(),
-            "osc_file_path": path.strip(),
-        }
+        # Updated in place rather than rebuilt: a fresh dict here would drop
+        # midi_device and shutdown_after_clear on every save.
+        self.settings.update(
+            {
+                "phone_name": phone.strip(),
+                "hotspot_name": hotspot.strip(),
+                "osc_file_path": path.strip(),
+                "midi_device": self.app.midi_device,
+            }
+        )
 
         save_settings(self.settings)
+        self.refresh_midi_devices()
         print("\nSettings successfully updated and saved to settings.json.")
 
         # Close the modal by updating the Slint state property
         self.app.show_settings = False
+
+    def update_shutdown_option(self, enabled):
+        """Persist the shutdown toggle the moment it is flipped — it lives on the
+        main screen, so there is no Save button to carry it."""
+        self.settings["shutdown_after_clear"] = bool(enabled)
+        save_settings(self.settings)
+        print()
+        print(
+            "Shutdown after CLEAR DECK: "
+            + ("ON — the PC will power off." if enabled else "off.")
+        )
 
     def run(self):
         self.app.run()
