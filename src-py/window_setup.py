@@ -40,7 +40,12 @@ SM_CXICON, SM_CYICON = 11, 12
 RETRY_INTERVAL = datetime.timedelta(milliseconds=16)
 MAX_ATTEMPTS = 120
 
-_user32 = ctypes.windll.user32
+# Our own handle on user32, deliberately not the cached ctypes.windll one.
+# ctypes.windll is process-wide, so setting argtypes on it rewrites those
+# signatures for every library in the process. Doing that to GetWindowRect broke
+# pygetwindow — it passes a pointer to its own RECT class — which aborted the
+# EnumWindows walk in CLEAR DECK and left it closing nothing at all.
+_user32 = ctypes.WinDLL("user32")
 
 # Without these the 64-bit handles come back through the default c_int return
 # type and are silently truncated.

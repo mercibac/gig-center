@@ -1,6 +1,7 @@
 {
-    "phone_name": "Merbac Redmi Note 9",
-    "hotspot_name": "Merbac Redmi Note 9",
+    "phone_name": "MERBAC PRO",
+    "hotspot_name": "MERBAC PRO",
     "osc_file_path": "D:/BANK/Presets/OPEN_STAGE_CONTROL/PSC LIVE MERBAC-MP.json",
-    "shutdown_after_clear": false
+    "shutdown_after_clear": false,
+    "midi_device": "Portable G-1 0"
 }

@@ -310,3 +310,25 @@ def test_release_survives_reopening_settings(monkeypatch):
 
     assert listener.opened == []
     assert app.midi_released is True
+
+
+# ---------------------------------------------------------
+# ctypes hygiene — window_setup must keep its argtypes to itself
+# ---------------------------------------------------------
+def test_window_setup_leaves_the_shared_user32_alone():
+    """ctypes.windll is process-wide, so configuring argtypes on it rewrites
+    those signatures for every library in the process.
+
+    Doing that to GetWindowRect broke pygetwindow, which passes a pointer to its
+    own RECT class: the exception fired inside an EnumWindows callback, aborted
+    the walk, and left CLEAR DECK iterating an empty window list while still
+    reporting success.
+    """
+    import ctypes
+
+    import window_setup  # noqa: F401  -- sets its argtypes at import time
+
+    assert ctypes.windll.user32.GetWindowRect.argtypes is None, (
+        "window_setup configured the shared ctypes.windll.user32; "
+        "it must use its own ctypes.WinDLL handle"
+    )
