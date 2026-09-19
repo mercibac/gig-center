@@ -23,7 +23,7 @@ def snap_gig_windows(option):
     # 2. Anchor Open Stage Control to the Left
     # ---------------------------------------------------------
     # Look for any window title that contains "Open Stage Control"
-    osc_windows = gw.getWindowsWithTitle("Open Stage Control v1.30.1")
+    osc_windows = gw.getWindowsWithTitle("Open Stage Control")
 
     if osc_windows:
         osc_win = osc_windows[0]
