@@ -177,6 +177,9 @@ fn main() -> Result<(), slint::PlatformError> {
     });
 
     let app_weak_save = app.as_weak();
+    let midi_for_save = Rc::clone(&midi);
+    let audio_for_save = Rc::clone(&audio);
+    let released_for_save = Rc::clone(&midi_released);
     app.on_save_clicked(move |phone, hotspot, osc_path| {
         let phone = phone.to_string();
         let hotspot = hotspot.to_string();
@@ -215,6 +218,16 @@ fn main() -> Result<(), slint::PlatformError> {
             app.set_phone_name(new_settings.phone_name.into());
             app.set_hotspot_name(new_settings.hotspot_name.into());
             app.set_osc_path(new_settings.osc_file_path.into());
+
+            // Follow the devices that were just saved. Without this the meter
+            // and the listener stay on whatever they opened last, so a new
+            // choice only took effect on the next settings open or a restart.
+            // Both helpers re-read settings.json, so this has to run after the
+            // save above. refresh_midi_devices still honours the release rule,
+            // so a save cannot take the port back from Gig Performer.
+            refresh_midi_devices(&app, &midi_for_save, &released_for_save, false);
+            refresh_audio_devices(&app, &audio_for_save, false);
+
             app.set_show_settings(false);
         }
     });
