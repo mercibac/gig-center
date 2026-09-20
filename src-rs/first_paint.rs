@@ -19,6 +19,7 @@
 //! attribute, and still a long way before anything is shown. The hook is scoped
 //! to this thread and removes itself as soon as it has seen the window.
 
+use std::cell::RefCell;
 use std::sync::atomic::{AtomicBool, AtomicIsize, Ordering};
 use std::time::Duration;
 
@@ -46,6 +47,24 @@ static CLOAKED: AtomicIsize = AtomicIsize::new(0);
 
 /// The message hook while it is installed, or 0.
 static HOOK: AtomicIsize = AtomicIsize::new(0);
+
+thread_local! {
+    /// Work deferred until the window is on screen. Anything slow that the
+    /// first frame does not need belongs here: run before the frame it would
+    /// delay the window appearing, and a timer could fire either side of it.
+    static AFTER_FIRST_FRAME: RefCell<Option<Box<dyn FnOnce()>>> = const { RefCell::new(None) };
+}
+
+/// Run `work` once the window has its first frame on screen. Call before the
+/// event loop starts; runs on the UI thread, so it may touch the window.
+pub fn run_after_first_frame(work: impl FnOnce() + 'static) {
+    AFTER_FIRST_FRAME.with(|slot| *slot.borrow_mut() = Some(Box::new(work)));
+}
+
+/// Take the deferred work, if any is still waiting.
+fn take_deferred_work() -> Option<Box<dyn FnOnce()>> {
+    AFTER_FIRST_FRAME.with(|slot| slot.borrow_mut().take())
+}
 
 /// Set once the window has been revealed, after which both the hook and
 /// [`reveal`] do nothing. Guards against cloaking a window that no one is left
@@ -138,6 +157,12 @@ impl CustomApplicationHandler for RevealOnFirstFrame {
             self.revealed = true;
             reveal();
             crate::startup_probe::note_first_frame();
+
+            // Only now that the window is up, and the startup timing is
+            // recorded, is it safe to spend time on anything else.
+            if let Some(work) = take_deferred_work() {
+                work();
+            }
         }
         EventResult::Propagate
     }

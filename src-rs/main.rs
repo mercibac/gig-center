@@ -78,7 +78,19 @@ fn main() -> Result<(), slint::PlatformError> {
     // so nothing takes the device back until the app restarts.
     let midi_released = Rc::new(RefCell::new(false));
 
-    refresh_midi_devices(&app, &midi, &midi_released, true);
+    // Deferred: enumerating MIDI devices initialises the MIDI subsystem, which
+    // measured ~90-105ms. Run before the event loop it blocked the first paint
+    // and pushed startup from ~70ms to ~200ms, so it waits for the window.
+    {
+        let app_weak_devices = app.as_weak();
+        let midi_for_devices = Rc::clone(&midi);
+        let released_for_devices = Rc::clone(&midi_released);
+        first_paint::run_after_first_frame(move || {
+            if let Some(app) = app_weak_devices.upgrade() {
+                refresh_midi_devices(&app, &midi_for_devices, &released_for_devices, true);
+            }
+        });
+    }
 
     // Faster than the console timer: the LED is a flicker, not a readout.
     // midir's callback runs on its own thread, so polling from a Slint timer
