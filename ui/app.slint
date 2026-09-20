@@ -315,29 +315,29 @@ export component MainWindow inherits Window {
                     horizontal-alignment: center;
                 }
 
+                // No `alignment: center` on these rows: it sizes each row to its
+                // own content, so a row with a wider field starts further left.
+                // Filling the width instead makes the 220px label column a real
+                // column, shared by every row.
                 HorizontalBox {
-                    alignment: center;
                     spacing: 20px;
                     Text { text: "Phone Name (KDE Connect):"; color: #d4d4d4; vertical-alignment: center; min-width: 220px; }
                     phone_input := LineEdit { text: root.phone-name; horizontal-stretch: 1; }
                 }
 
                 HorizontalBox {
-                    alignment: center;
                     spacing: 20px;
                     Text { text: "Hotspot Name (SSID):"; color: #d4d4d4; vertical-alignment: center; min-width: 220px; }
                     hotspot_input := LineEdit { text: root.hotspot-name; horizontal-stretch: 1; }
                 }
 
                 HorizontalBox {
-                    alignment: center;
                     spacing: 20px;
                     Text { text: "OSC File Path:"; color: #d4d4d4; vertical-alignment: center; min-width: 220px; }
                     osc_input := LineEdit { text: root.osc-path; horizontal-stretch: 1; }
                 }
 
                 HorizontalBox {
-                    alignment: center;
                     spacing: 20px;
                     Text { text: "MIDI Device:"; color: #d4d4d4; vertical-alignment: center; min-width: 220px; }
                     ComboBox {
@@ -349,7 +349,6 @@ export component MainWindow inherits Window {
                 }
 
                 HorizontalBox {
-                    alignment: center;
                     spacing: 20px;
                     Text { text: "Audio Output:"; color: #d4d4d4; vertical-alignment: center; min-width: 220px; }
                     ComboBox {
