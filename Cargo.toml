@@ -45,6 +45,9 @@ features = [
     "Win32_System_Threading",
     "Win32_Media_Audio",
     "Win32_Media_Audio_Endpoints",
+    "Win32_Devices_FunctionDiscovery",
+    "Win32_System_Com_StructuredStorage",
+    "Win32_UI_Shell_PropertiesSystem",
 ]
 
 [dev-dependencies]
@@ -70,6 +73,6 @@ opt-level = 3
 # Do not set `panic = "abort"` here: console::run_guarded relies on catch_unwind
 # to re-enable the UI buttons after a worker thread panics.
 opt-level = 3
-lto = "thin"
-codegen-units = 12
+lto = "fat"
+codegen-units = 1
 strip = true

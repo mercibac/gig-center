@@ -105,6 +105,9 @@ export component MainWindow inherits Window {
     in-out property <string> midi-device: "";
     in-out property <bool> shutdown-after-clear: false;
     in-out property <bool> manage-defender: true;
+    in property <bool> audio-active: false;
+    in property <[string]> audio-devices: [];
+    in-out property <string> audio-device: "";
 
     // --- Modal State ---
     in-out property <bool> show-settings: false;
@@ -236,9 +239,26 @@ export component MainWindow inherits Window {
             }
         }
 
-        // 3. Bottom Settings Button
+        // 3. Bottom Row — audio activity left, Settings right, on the same
+        // grid as the console panel above.
         HorizontalLayout {
-            alignment: end;
+            HorizontalLayout {
+                horizontal-stretch: 1;
+                alignment: start;
+                spacing: 8px;
+
+                MidiLed {
+                    lit: root.audio-active;
+                    y: (parent.height - self.height) / 2;
+                }
+                Text {
+                    text: "AUDIO";
+                    color: #d4d4d4;
+                    font-size: 14px;
+                    vertical-alignment: center;
+                }
+            }
+
             DarkButton {
                 btn-text: "⚙ Settings";
                 height: 50px;
@@ -272,7 +292,7 @@ export component MainWindow inherits Window {
             // Grew with the MIDI row: each settings row costs ~85px once the
             // HorizontalBox padding is counted, and the buttons spilled out
             // below the box at 360px.
-            height: 500px;
+            height: 585px;
             background: #2b2b2b;
             border-radius: 8px;
             border-width: 1px;
@@ -325,6 +345,18 @@ export component MainWindow inherits Window {
                         current-value: root.midi-device;
                         horizontal-stretch: 1;
                         selected(value) => { root.midi-device = value; }
+                    }
+                }
+
+                HorizontalBox {
+                    alignment: center;
+                    spacing: 20px;
+                    Text { text: "Audio Output:"; color: #d4d4d4; vertical-alignment: center; min-width: 220px; }
+                    ComboBox {
+                        model: root.audio-devices;
+                        current-value: root.audio-device;
+                        horizontal-stretch: 1;
+                        selected(value) => { root.audio-device = value; }
                     }
                 }
 

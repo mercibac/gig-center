@@ -4,6 +4,7 @@
 mod console;
 mod app_icon;
 mod assets;
+mod audio_input;
 mod center;
 mod connection;
 mod first_paint;
@@ -77,6 +78,7 @@ fn main() -> Result<(), slint::PlatformError> {
     // Set once LAUNCH GIG RIG hands the input to Gig Performer; never cleared,
     // so nothing takes the device back until the app restarts.
     let midi_released = Rc::new(RefCell::new(false));
+    let audio = Rc::new(RefCell::new(audio_input::AudioMeter::new()));
 
     // Deferred: enumerating MIDI devices initialises the MIDI subsystem, which
     // measured ~90-105ms. Run before the event loop it blocked the first paint
@@ -85,9 +87,11 @@ fn main() -> Result<(), slint::PlatformError> {
         let app_weak_devices = app.as_weak();
         let midi_for_devices = Rc::clone(&midi);
         let released_for_devices = Rc::clone(&midi_released);
+        let audio_for_devices = Rc::clone(&audio);
         first_paint::run_after_first_frame(move || {
             if let Some(app) = app_weak_devices.upgrade() {
                 refresh_midi_devices(&app, &midi_for_devices, &released_for_devices, true);
+                refresh_audio_devices(&app, &audio_for_devices, true);
             }
         });
     }
@@ -96,11 +100,13 @@ fn main() -> Result<(), slint::PlatformError> {
     // midir's callback runs on its own thread, so polling from a Slint timer
     // is what keeps the UI property on the UI thread.
     let midi_for_timer = Rc::clone(&midi);
+    let audio_for_timer = Rc::clone(&audio);
     let app_weak_midi = app.as_weak();
     let midi_timer = Timer::default();
     midi_timer.start(TimerMode::Repeated, Duration::from_millis(40), move || {
         if let Some(app) = app_weak_midi.upgrade() {
             app.set_midi_active(midi_for_timer.borrow().is_active());
+            app.set_audio_active(audio_for_timer.borrow().is_active());
         }
     });
 
@@ -188,6 +194,10 @@ fn main() -> Result<(), slint::PlatformError> {
             .upgrade()
             .map(|app| app.get_midi_device().to_string())
             .unwrap_or_default();
+        let chosen_audio = app_weak_save
+            .upgrade()
+            .map(|app| app.get_audio_device().to_string())
+            .unwrap_or_default();
 
         let new_settings = settings::Settings {
             phone_name: phone.trim().to_string(),
@@ -199,6 +209,11 @@ fn main() -> Result<(), slint::PlatformError> {
                 stored.midi_device
             } else {
                 chosen_device
+            },
+            audio_device: if chosen_audio.is_empty() {
+                stored.audio_device
+            } else {
+                chosen_audio
             },
             shutdown_after_clear: stored.shutdown_after_clear,
             manage_defender: stored.manage_defender,
@@ -219,10 +234,12 @@ fn main() -> Result<(), slint::PlatformError> {
     // mid-session shows up without a restart.
     let app_weak_settings = app.as_weak();
     let midi_for_settings = Rc::clone(&midi);
+    let audio_for_settings = Rc::clone(&audio);
     let released_for_settings = Rc::clone(&midi_released);
     app.on_settings_opened(move || {
         if let Some(app) = app_weak_settings.upgrade() {
             refresh_midi_devices(&app, &midi_for_settings, &released_for_settings, false);
+            refresh_audio_devices(&app, &audio_for_settings, false);
         }
     });
 
@@ -319,4 +336,37 @@ fn release_midi(
         app.set_midi_active(false);
     }
     console_log!("MIDI released for the rest of the session — restart to listen again.");
+}
+
+/// Re-read the audio outputs and (re)watch the one to meter.
+///
+/// Mirrors `refresh_midi_devices`, minus the release rule: nothing competes
+/// with this app for a peak meter, so there is no reason to ever stop watching.
+fn refresh_audio_devices(
+    app: &MainWindow,
+    audio: &Rc<RefCell<audio_input::AudioMeter>>,
+    announce: bool,
+) {
+    let devices = audio_input::list_devices();
+    let model: Vec<slint::SharedString> = devices.iter().map(|d| d.as_str().into()).collect();
+    app.set_audio_devices(slint::ModelRc::new(slint::VecModel::from(model)));
+
+    let saved = settings::load_settings().audio_device;
+    let wanted = audio_input::choose_device(&saved, &devices);
+    app.set_audio_device(wanted.clone().unwrap_or_default().into());
+
+    let mut meter = audio.borrow_mut();
+    if wanted != meter.device || announce {
+        match &wanted {
+            Some(name) => {
+                if meter.open(name) {
+                    console_log!("Watching audio on '{}'.", name);
+                }
+            }
+            None => {
+                meter.close();
+                console_log!("No audio output found.");
+            }
+        }
+    }
 }

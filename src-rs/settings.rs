@@ -10,6 +10,9 @@ pub struct Settings {
     /// MIDI input to watch for the activity LED. Empty until one is chosen.
     #[serde(default)]
     pub midi_device: String,
+    /// Audio output to watch for the signal LED. Empty until one is chosen.
+    #[serde(default)]
+    pub audio_device: String,
     /// Power the PC off once CLEAR DECK has finished.
     #[serde(default)]
     pub shutdown_after_clear: bool,
@@ -32,6 +35,7 @@ impl Default for Settings {
             hotspot_name: "SHARED ACCESS POINT".to_string(),
             osc_file_path: String::new(),
             midi_device: String::new(),
+            audio_device: String::new(),
             shutdown_after_clear: false,
             manage_defender: true,
         }
