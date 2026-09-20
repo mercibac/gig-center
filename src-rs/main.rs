@@ -199,25 +199,14 @@ fn main() -> Result<(), slint::PlatformError> {
             .map(|app| app.get_audio_device().to_string())
             .unwrap_or_default();
 
-        let new_settings = settings::Settings {
-            phone_name: phone.trim().to_string(),
-            hotspot_name: hotspot.trim().to_string(),
-            osc_file_path: osc_path.trim().to_string(),
-            // The dropdown reads empty whenever the controller is unplugged;
-            // taking that at face value would throw the remembered device away.
-            midi_device: if chosen_device.is_empty() {
-                stored.midi_device
-            } else {
-                chosen_device
-            },
-            audio_device: if chosen_audio.is_empty() {
-                stored.audio_device
-            } else {
-                chosen_audio
-            },
-            shutdown_after_clear: stored.shutdown_after_clear,
-            manage_defender: stored.manage_defender,
-        };
+        let new_settings = settings::merge_from_form(
+            stored,
+            &phone,
+            &hotspot,
+            &osc_path,
+            &chosen_device,
+            &chosen_audio,
+        );
 
         settings::save_settings(&new_settings);
         console_log!("\nSettings successfully updated and saved to settings.json.");

@@ -95,3 +95,94 @@ pub fn save_settings(settings: &Settings) {
         eprintln!("Error: Could not save settings.json: {e}");
     }
 }
+
+/// Build the settings to save from the modal's fields, what is already on disk,
+/// and the two dropdowns.
+///
+/// Lives here rather than inside the save callback so the rules are testable
+/// without driving the UI. Two of them matter:
+///
+/// - The shutdown and Defender toggles live on the main screen, not this form,
+///   so they are carried over from disk untouched.
+/// - A dropdown reads empty when its device is not connected. Taking that at
+///   face value would wipe the remembered device, so an empty one keeps
+///   whatever was stored.
+pub fn merge_from_form(
+    stored: Settings,
+    phone: &str,
+    hotspot: &str,
+    osc_path: &str,
+    midi_device: &str,
+    audio_device: &str,
+) -> Settings {
+    Settings {
+        phone_name: phone.trim().to_string(),
+        hotspot_name: hotspot.trim().to_string(),
+        osc_file_path: osc_path.trim().to_string(),
+        midi_device: if midi_device.is_empty() {
+            stored.midi_device
+        } else {
+            midi_device.to_string()
+        },
+        audio_device: if audio_device.is_empty() {
+            stored.audio_device
+        } else {
+            audio_device.to_string()
+        },
+        shutdown_after_clear: stored.shutdown_after_clear,
+        manage_defender: stored.manage_defender,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn stored() -> Settings {
+        Settings {
+            phone_name: "old".into(),
+            hotspot_name: "old".into(),
+            osc_file_path: "old.json".into(),
+            midi_device: "Portable G-1 0".into(),
+            audio_device: "Speakers 01 (ASIOVADPRO Driver)".into(),
+            shutdown_after_clear: true,
+            manage_defender: false,
+        }
+    }
+
+    #[test]
+    fn the_chosen_audio_output_is_saved() {
+        let saved = merge_from_form(
+            stored(),
+            "Phone",
+            "Hotspot",
+            "p.json",
+            "Portable G-1 0",
+            "Haut-parleur (Realtek(R) Audio)",
+        );
+        assert_eq!(saved.audio_device, "Haut-parleur (Realtek(R) Audio)");
+    }
+
+    #[test]
+    fn an_empty_dropdown_keeps_the_stored_device() {
+        // Nothing connected, so both dropdowns read empty.
+        let saved = merge_from_form(stored(), "Phone", "Hotspot", "p.json", "", "");
+        assert_eq!(saved.audio_device, "Speakers 01 (ASIOVADPRO Driver)");
+        assert_eq!(saved.midi_device, "Portable G-1 0");
+    }
+
+    #[test]
+    fn the_main_screen_toggles_survive_a_save() {
+        let saved = merge_from_form(stored(), "Phone", "Hotspot", "p.json", "x", "y");
+        assert!(saved.shutdown_after_clear);
+        assert!(!saved.manage_defender);
+    }
+
+    #[test]
+    fn form_fields_are_trimmed() {
+        let saved = merge_from_form(stored(), "  Phone  ", " Hotspot ", " p.json ", "x", "y");
+        assert_eq!(saved.phone_name, "Phone");
+        assert_eq!(saved.hotspot_name, "Hotspot");
+        assert_eq!(saved.osc_file_path, "p.json");
+    }
+}
