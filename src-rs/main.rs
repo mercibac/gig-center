@@ -92,10 +92,6 @@ fn main() -> Result<(), slint::PlatformError> {
             if let Some(app) = app_weak_devices.upgrade() {
                 refresh_midi_devices(&app, &midi_for_devices, &released_for_devices, true);
                 refresh_audio_devices(&app, &audio_for_devices, true);
-                // Everything deferred is done, so the UI can come out from
-                // behind its veil. Last, deliberately: readiness means the
-                // work above finished, not that it started.
-                app.set_ready(true);
             }
         });
     }
