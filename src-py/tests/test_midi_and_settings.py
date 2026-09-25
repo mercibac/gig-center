@@ -640,3 +640,64 @@ def test_audio_default_carries_the_new_key():
     import main
 
     assert main.DEFAULT_CONFIG["audio_device"] == ""
+
+
+# ---------------------------------------------------------
+# Startup probe — the splash only earns its place on a slow boot
+# ---------------------------------------------------------
+def test_probe_lists_both_kinds_of_device(monkeypatch):
+    import threading as _t
+
+    import main
+
+    monkeypatch.setattr(main.midi_input, "list_devices", lambda: ["Portable G-1"])
+    monkeypatch.setattr(main.audio_input, "list_devices", lambda: ["Casque"])
+
+    found, done = {}, _t.Event()
+    main._probe_devices(found, done)
+
+    assert done.is_set()
+    assert found == {"midi": ["Portable G-1"], "audio": ["Casque"]}
+
+
+def test_a_failing_probe_still_releases_the_wait(monkeypatch):
+    """A probe that dies must not strand the app on the splash for ever."""
+    import threading as _t
+
+    import main
+
+    def explode():
+        raise OSError("no MIDI subsystem today")
+
+    monkeypatch.setattr(main.midi_input, "list_devices", explode)
+
+    found, done = {}, _t.Event()
+    main._probe_devices(found, done)
+
+    assert done.is_set(), "the app would wait for a probe that never answers"
+    assert found == {}, "nothing was listed, so nothing should be claimed"
+
+
+def test_the_probe_initialises_com_before_listing_audio(monkeypatch):
+    """audio_input goes through pycaw, and COM has to be live on this thread.
+
+    Without it the audio list comes back empty on the worker while working
+    perfectly on the UI thread — the kind of bug that only shows up in the
+    packaged build.
+    """
+    import threading as _t
+
+    import main
+
+    calls = []
+    monkeypatch.setattr(main.comtypes, "CoInitialize", lambda: calls.append("init"))
+    monkeypatch.setattr(main.comtypes, "CoUninitialize", lambda: calls.append("uninit"))
+    monkeypatch.setattr(main.midi_input, "list_devices", lambda: [])
+    monkeypatch.setattr(
+        main.audio_input, "list_devices", lambda: calls.append("audio") or []
+    )
+
+    main._probe_devices({}, _t.Event())
+
+    assert calls.index("init") < calls.index("audio"), "COM was not live in time"
+    assert calls[-1] == "uninit", "the worker must give its apartment back"

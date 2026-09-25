@@ -5,6 +5,7 @@ mod console;
 mod app_icon;
 mod assets;
 mod audio_input;
+mod backend;
 mod center;
 mod connection;
 mod first_paint;
@@ -40,20 +41,26 @@ const SPLASH_DEADLINE: Duration = Duration::from_secs(20);
 const MAIN_WIDTH: f32 = 800.0;
 const MAIN_HEIGHT: f32 = 600.0;
 
+/// How long to wait for the backend before deciding a splash is warranted.
+///
+/// Measured warm, the probe needs ~120ms from process start and the UI is ready
+/// at ~70ms, so about 50ms of this is actually used and the splash never
+/// appears. A cold boot blows straight through it, which is the case the splash
+/// exists for. Nothing is on screen while this runs, so the wait costs a little
+/// latency and no visible stutter.
+const READY_GRACE: Duration = Duration::from_millis(100);
+
+/// How often the splash checks whether the backend has finished.
+const PROBE_INTERVAL: Duration = Duration::from_millis(30);
+
+/// Reveal deadline for the quick path, where only a frame is being waited on.
+const FIRST_FRAME_DEADLINE: Duration = Duration::from_millis(1000);
+
 thread_local! {
     /// The splash, while it is up. Held here because the deferred work that
     /// dismisses it runs from the event loop, not from `main`'s scope, and
     /// dropping the component would close the window at the wrong moment.
     static SPLASH: RefCell<Option<SplashWindow>> = const { RefCell::new(None) };
-}
-
-/// Narrate what startup is doing, if the splash is still up.
-fn splash_status(text: &str) {
-    SPLASH.with(|slot| {
-        if let Some(splash) = slot.borrow().as_ref() {
-            splash.set_status(text.into());
-        }
-    });
 }
 
 fn main() -> Result<(), slint::PlatformError> {
@@ -85,6 +92,10 @@ fn main() -> Result<(), slint::PlatformError> {
     selector.select()?;
     startup_probe::mark("icon");
 
+    // Started before the window exists, so the whole of Slint's setup is time
+    // the probe gets for nothing.
+    let probe = backend::probe();
+
     let settings = settings::load_settings();
     startup_probe::mark("settings");
 
@@ -107,50 +118,6 @@ fn main() -> Result<(), slint::PlatformError> {
     // so nothing takes the device back until the app restarts.
     let midi_released = Rc::new(RefCell::new(false));
     let audio = Rc::new(RefCell::new(audio_input::AudioMeter::new()));
-
-    // Deferred: enumerating MIDI devices initialises the MIDI subsystem, which
-    // measured ~90-105ms. Run before the event loop it blocked the first paint
-    // and pushed startup from ~70ms to ~200ms, so it waits for the window.
-    {
-        let app_weak_devices = app.as_weak();
-        let app_weak_handover = app.as_weak();
-        let midi_for_devices = Rc::clone(&midi);
-        let released_for_devices = Rc::clone(&midi_released);
-        let audio_for_devices = Rc::clone(&audio);
-        first_paint::run_after_first_frame(move || {
-            if let Some(app) = app_weak_devices.upgrade() {
-                splash_status("Starting MIDI…");
-                refresh_midi_devices(&app, &midi_for_devices, &released_for_devices, true);
-                splash_status("Listening for audio…");
-                refresh_audio_devices(&app, &audio_for_devices, true);
-            }
-            // The backend is ready, so the main window can take the screen.
-            //
-            // It arms the cloak for itself, exactly as the splash did, so it is
-            // created out of composition, laid out, centred and painted before
-            // anyone sees it — no white flash as it replaces the splash. The
-            // splash is dismissed from the deferred slot, which runs after that
-            // reveal, so the screen is never left with nothing on it.
-            first_paint::rearm();
-            first_paint::run_after_first_frame(|| {
-                SPLASH.with(|slot| {
-                    if let Some(splash) = slot.borrow_mut().take() {
-                        let _ = splash.hide();
-                    }
-                });
-            });
-            if let Some(app) = app_weak_handover.upgrade() {
-                // Sized explicitly because a window that is not the first one
-                // created does not take its preferred size: measured 640x480
-                // against the 800x600 app.slint asks for. Set before showing,
-                // so it is laid out and centred at the right size while it is
-                // still cloaked.
-                app.window()
-                    .set_size(slint::LogicalSize::new(MAIN_WIDTH, MAIN_HEIGHT));
-                let _ = app.show();
-            }
-        });
-    }
 
     // Faster than the console timer: the LED is a flicker, not a readout.
     // midir's callback runs on its own thread, so polling from a Slint timer
@@ -331,23 +298,88 @@ Windows Defender step: {}",
 
     startup_probe::mark("ui_init");
 
-    // Only the splash is shown now. The main window exists and is wired up, but
-    // stays unshown until the backend is ready, so there is no window to click
-    // into while it is still starting.
-    let splash = SplashWindow::new()?;
-    if let Some(logo) = splash_art::logo() {
-        splash.set_logo(logo);
-    }
-    if let Some(shine) = splash_art::shine() {
-        splash.set_shine(shine);
-    }
-    splash.show()?;
-    SPLASH.with(|slot| *slot.borrow_mut() = Some(splash));
+    // The whole question: did the backend finish while the UI was being built?
+    // Nothing is on screen yet, so waiting here is latency, not a freeze.
+    //
+    // Kept alive past this point because the slow path polls it from a timer.
+    let poll_timer = Timer::default();
+    match backend::wait_for(&probe, READY_GRACE) {
+        backend::Probe::Ready(devices) => {
+            // Quick path — a warm start. No splash is ever created.
+            apply_midi_devices(&app, &midi, &midi_released, devices.midi, true);
+            apply_audio_devices(&app, &audio, devices.audio, true);
+            app.window()
+                .set_size(slint::LogicalSize::new(MAIN_WIDTH, MAIN_HEIGHT));
+            app.show()?;
+            first_paint::arm_deadline(FIRST_FRAME_DEADLINE);
+        }
+        _ => {
+            // Slow path — a cold boot. Show the splash and keep checking.
+            let splash = SplashWindow::new()?;
+            if let Some(logo) = splash_art::logo() {
+                splash.set_logo(logo);
+            }
+            if let Some(shine) = splash_art::shine() {
+                splash.set_shine(shine);
+            }
+            splash.set_status("Preparing devices…".into());
+            splash.show()?;
+            SPLASH.with(|slot| *slot.borrow_mut() = Some(splash));
 
-    // Generous, because this is only the safety net: the splash normally ends
-    // when the backend says so, and a cold boot is slow. Left in because a
-    // window that never appears is worse than one that appears too early.
-    first_paint::arm_deadline(SPLASH_DEADLINE);
+            let app_weak_handover = app.as_weak();
+            let midi_for_handover = Rc::clone(&midi);
+            let released_for_handover = Rc::clone(&midi_released);
+            let audio_for_handover = Rc::clone(&audio);
+            poll_timer.start(TimerMode::Repeated, PROBE_INTERVAL, move || {
+                let found = match backend::poll(&probe) {
+                    backend::Probe::Pending => return,
+                    backend::Probe::Ready(devices) => devices,
+                    // Nothing is coming. Start anyway with nothing enumerated,
+                    // rather than leaving the splash up for good.
+                    backend::Probe::Failed => backend::Devices {
+                        midi: Vec::new(),
+                        audio: Vec::new(),
+                    },
+                };
+
+                let Some(app) = app_weak_handover.upgrade() else {
+                    return;
+                };
+                apply_midi_devices(
+                    &app,
+                    &midi_for_handover,
+                    &released_for_handover,
+                    found.midi,
+                    true,
+                );
+                apply_audio_devices(&app, &audio_for_handover, found.audio, true);
+
+                // The main window arms the cloak for itself, exactly as the
+                // splash did, so it is created out of composition, laid out,
+                // centred and painted before anyone sees it — no white flash as
+                // it replaces the splash. The splash is dismissed from the
+                // deferred slot, which runs after that reveal, so the screen is
+                // never left with nothing on it.
+                first_paint::rearm();
+                first_paint::run_after_first_frame(|| {
+                    SPLASH.with(|slot| {
+                        if let Some(splash) = slot.borrow_mut().take() {
+                            let _ = splash.hide();
+                        }
+                    });
+                });
+                // Sized explicitly because a window that is not the first one
+                // created does not take its preferred size: measured 640x480
+                // against the 800x600 app.slint asks for.
+                app.window()
+                    .set_size(slint::LogicalSize::new(MAIN_WIDTH, MAIN_HEIGHT));
+                let _ = app.show();
+            });
+
+            first_paint::arm_deadline(SPLASH_DEADLINE);
+        }
+    }
+
     slint::run_event_loop()
 }
 
@@ -363,7 +395,20 @@ fn refresh_midi_devices(
     released: &Rc<RefCell<bool>>,
     announce: bool,
 ) {
-    let devices = midi_input::list_devices();
+    apply_midi_devices(app, midi, released, midi_input::list_devices(), announce);
+}
+
+/// The half of the above that touches the UI, given a list already in hand.
+///
+/// Split out so startup can enumerate on a worker thread and still end up here,
+/// on the UI thread, running exactly what the settings and save paths run.
+fn apply_midi_devices(
+    app: &MainWindow,
+    midi: &Rc<RefCell<midi_input::MidiListener>>,
+    released: &Rc<RefCell<bool>>,
+    devices: Vec<String>,
+    announce: bool,
+) {
     let model: Vec<slint::SharedString> = devices.iter().map(|d| d.as_str().into()).collect();
     app.set_midi_devices(slint::ModelRc::new(slint::VecModel::from(model)));
 
@@ -422,7 +467,16 @@ fn refresh_audio_devices(
     audio: &Rc<RefCell<audio_input::AudioMeter>>,
     announce: bool,
 ) {
-    let devices = audio_input::list_devices();
+    apply_audio_devices(app, audio, audio_input::list_devices(), announce);
+}
+
+/// The half of the above that touches the UI, given a list already in hand.
+fn apply_audio_devices(
+    app: &MainWindow,
+    audio: &Rc<RefCell<audio_input::AudioMeter>>,
+    devices: Vec<String>,
+    announce: bool,
+) {
     let model: Vec<slint::SharedString> = devices.iter().map(|d| d.as_str().into()).collect();
     app.set_audio_devices(slint::ModelRc::new(slint::VecModel::from(model)));
 

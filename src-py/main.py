@@ -1,3 +1,4 @@
+import comtypes
 import slint
 import threading
 import queue
@@ -121,7 +122,10 @@ class GigControlApp:
         self.midi = midi_input.MidiListener()
         # Set once LAUNCH GIG RIG hands the input over; never cleared.
         self.midi_released = False
-        self.refresh_midi_devices(announce=True)
+        # Devices are not listed here. Listing is the slow part of starting up
+        # and runs on a worker thread instead, so the app can tell whether it is
+        # ready before deciding to show a splash. run_with_splash applies the
+        # result through apply_midi_devices / apply_audio_devices.
 
         # Enumerating audio endpoints measures ~180ms, because pycaw builds a
         # property store per device. It is not done here: the splash sequence
@@ -187,7 +191,14 @@ class GigControlApp:
         except at startup, where `announce` forces one line so the state is
         never a mystery.
         """
-        devices = midi_input.list_devices()
+        self.apply_midi_devices(midi_input.list_devices(), announce)
+
+    def apply_midi_devices(self, devices, announce=False):
+        """The half of the above that touches the UI, given a list in hand.
+
+        Split out so startup can enumerate on a worker thread and still end up
+        here, on the UI thread, running what the settings and save paths run.
+        """
         self.app.midi_devices = slint.ListModel(devices)
 
         wanted = midi_input.choose_device(self.settings.get("midi_device", ""), devices)
@@ -223,7 +234,10 @@ class GigControlApp:
         with this app for a peak meter, so there is no reason to ever stop
         watching.
         """
-        devices = audio_input.list_devices()
+        self.apply_audio_devices(audio_input.list_devices(), announce)
+
+    def apply_audio_devices(self, devices, announce=False):
+        """The half of the above that touches the UI, given a list in hand."""
         self.app.audio_devices = slint.ListModel(devices)
 
         wanted = audio_input.choose_device(
@@ -381,6 +395,15 @@ class GigControlApp:
 # frame or two between the blocking pieces, short enough not to pad startup.
 STEP_INTERVAL = datetime.timedelta(milliseconds=60)
 
+# How long to wait for the backend before deciding a splash is warranted.
+#
+# Measured warm, listing devices takes ~170ms on the worker while building the
+# UI takes longer than that on the UI thread, so the probe is usually finished
+# before this is even reached and the splash never appears. A cold boot blows
+# straight through it, which is the case the splash exists for. Nothing is on
+# screen while this runs, so it costs latency and no visible stutter.
+READY_GRACE = 0.1
+
 # Logical size of the main window, mirroring preferred-width/height in
 # ui/app.slint. Kept here because the window has to be sized explicitly once a
 # splash exists — see window_setup._resize.
@@ -407,74 +430,91 @@ def _warm_up(done):
         done.set()
 
 
-def run_with_splash():
-    """Show the splash, do the slow work behind it, then hand over.
+def _probe_devices(found, done):
+    """List the devices, off the UI thread.
 
-    The main window is never shown until everything is ready, so there is no
-    window to click into while it is still starting.
+    Listing is the slow part of starting up and touches no Slint object, so it
+    runs here while the UI is being built. Opening the chosen device stays on
+    the UI thread, where the models and shared state live.
 
-    Each step announces itself and then yields to the event loop before doing
-    its work, so the label is on screen while the work happens rather than
-    after it.
+    CoInitialize first: audio_input goes through pycaw, and COM has to be live
+    on whichever thread touches it — the same rule AudioMeter._watch follows.
     """
-    splash = load_ui().SplashWindow()
-    splash.logo = slint.Image.load_from_path(resource_path("assets/splash_logo.png"))
-    splash.shine = slint.Image.load_from_path(resource_path("assets/splash_shine.png"))
-    splash.show()
+    try:
+        comtypes.CoInitialize()
+        try:
+            found["midi"] = midi_input.list_devices()
+            found["audio"] = audio_input.list_devices()
+        finally:
+            comtypes.CoUninitialize()
+    except Exception as e:
+        # Startup must not hang on a probe that died. Empty lists mean the app
+        # opens with no devices, which the settings modal can put right.
+        print(f"Warning: could not list devices: {e}")
+    finally:
+        done.set()
 
-    # Held: dropping either timer stops the retries that centre the windows.
-    held = {"splash_timer": window_setup.apply()}
 
+def run_with_splash():
+    """Start the app, showing a splash only if the backend is slow.
+
+    The backend is probed on a worker thread while the UI is built. If it has
+    finished by the time the UI is ready, the main window opens straight away
+    and no splash is ever created — the warm-restart case. Otherwise the splash
+    holds the screen until the probe lands, which is what a cold boot needs.
+
+    Either way the main window is not shown until its devices are set up, so
+    there is never a window to click into while it is still starting.
+    """
+    found = {}
+    probe_done = threading.Event()
+    threading.Thread(
+        target=_probe_devices, args=(found, probe_done), daemon=True
+    ).start()
+
+    # Started here rather than with the devices because it is not part of being
+    # ready: the launch module only matters on the first LAUNCH click, and
+    # waiting for it would put the splash up on every start.
     warm_done = threading.Event()
     threading.Thread(target=_warm_up, args=(warm_done,), daemon=True).start()
 
-    def build_app():
-        held["app"] = GigControlApp()
-
-    def list_audio():
-        held["app"].refresh_audio_devices(announce=True)
-
-    steps = [
-        ("Starting MIDI…", build_app),
-        ("Listing audio outputs…", list_audio),
-    ]
-
-    timer = slint.Timer()
-    state = {"step": 0, "announced": False}
-
-    def pump():
-        step = state["step"]
-
-        if step >= len(steps):
-            # Everything on the UI thread is done; the import may still be
-            # running, and the splash waits for it rather than handing over to
-            # a window whose first click would stall.
-            if not warm_done.is_set():
-                splash.status = "Loading launch module…"
-                return
-            timer.stop()
-            hand_over()
-            return
-
-        label, work = steps[step]
-        if not state["announced"]:
-            splash.status = label
-            state["announced"] = True
-            return  # let it paint before blocking on the work
-
-        work()
-        state["step"] += 1
-        state["announced"] = False
+    app = GigControlApp()
+    # Held: dropping either timer stops the retries that centre the windows.
+    held = {}
 
     def hand_over():
-        app = held["app"]
-        # Shown before the splash is hidden, so the event loop is never left
-        # without a window — that would end it and close the app.
+        """Set the devices up, then put the main window on screen."""
+        app.apply_midi_devices(found.get("midi", []), announce=True)
+        app.apply_audio_devices(found.get("audio", []), announce=True)
         app.app.show()
         # The size is forced because a Slint window that is not the only one on
         # screen does not take its preferred-width/height — measured at 668x398
         # against 1018x797 on its own. It matches app.slint's preferred size.
         held["window_timer"] = window_setup.apply(size=MAIN_WINDOW_SIZE)
+
+    # The whole question: did the backend finish while the UI was being built?
+    # Nothing is on screen yet, so waiting here is latency, not a freeze.
+    if probe_done.wait(READY_GRACE):
+        hand_over()
+        slint.run_event_loop()
+        return
+
+    splash = load_ui().SplashWindow()
+    splash.logo = slint.Image.load_from_path(resource_path("assets/splash_logo.png"))
+    splash.shine = slint.Image.load_from_path(resource_path("assets/splash_shine.png"))
+    splash.status = "Preparing devices…"
+    splash.show()
+    held["splash_timer"] = window_setup.apply()
+
+    timer = slint.Timer()
+
+    def pump():
+        if not probe_done.is_set():
+            return
+        timer.stop()
+        # Shown before the splash is hidden, so the event loop is never left
+        # without a window — that would end it and close the app.
+        hand_over()
         splash.hide()
 
     timer.start(slint.TimerMode.Repeated, STEP_INTERVAL, pump)
