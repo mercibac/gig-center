@@ -113,10 +113,19 @@ class GigControlApp:
         # timer and the window paints first. single_shot is static and keeps
         # itself alive until it fires, so there is nothing to hold onto.
         self.audio = audio_input.AudioMeter()
+        self._audio_ready = False
         slint.Timer.single_shot(
             datetime.timedelta(milliseconds=50),
-            lambda: self.refresh_audio_devices(announce=True),
+            self._first_audio_refresh,
         )
+
+        # The first LAUNCH click used to pay ~1s importing cv2, pyautogui and
+        # numpy through gig_launcher. Warming it here moves that cost behind the
+        # startup veil, where the user cannot click into it. gig_launcher is
+        # only function definitions, so importing it early has no side effects.
+        self._warm_done = threading.Event()
+        self._ready_announced = False
+        threading.Thread(target=self._warm_up, daemon=True).start()
 
         # Optimized timer: 100ms instead of 50ms reduces overhead
         self.console_timer = slint.Timer()
@@ -160,6 +169,17 @@ class GigControlApp:
         if texts:
             self.app.console_text += "".join(texts)
 
+        # Lift the startup veil once both slow parts have finished. Done here
+        # because Slint properties must be written on the UI thread, and this
+        # timer is already running on it — one timer rather than another.
+        if (
+            not self._ready_announced
+            and self._audio_ready
+            and self._warm_done.is_set()
+        ):
+            self._ready_announced = True
+            self.app.ready = True
+
     def poll_midi(self):
         # One timer drives both LEDs: they run at the same rate and neither
         # does more than read a timestamp.
@@ -195,6 +215,26 @@ class GigControlApp:
             else:
                 self.midi.close()
                 print("No MIDI device connected.")
+
+    def _first_audio_refresh(self):
+        """The deferred startup enumeration, and half of what readiness means."""
+        self.refresh_audio_devices(announce=True)
+        self._audio_ready = True
+
+    def _warm_up(self):
+        """Pre-import the launch module, off the UI thread.
+
+        Runs on its own thread, so it must not touch Slint: it only sets an
+        Event that poll_console reads from the UI thread.
+        """
+        try:
+            import gig_launcher  # noqa: F401
+        except Exception as e:
+            # A failed warm-up must never leave the app stuck behind the veil.
+            # The click path imports it again and will report the real error.
+            print(f"Warning: could not pre-load the launch module: {e}")
+        finally:
+            self._warm_done.set()
 
     def refresh_devices(self):
         """Re-enumerate both kinds of device, for the settings modal.

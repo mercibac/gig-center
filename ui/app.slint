@@ -109,6 +109,25 @@ export component MainWindow inherits Window {
     in property <[string]> audio-devices: [];
     in-out property <string> audio-device: "";
 
+    // --- Startup Gate ---
+    // The backend sets `ready` once it can actually service a click. Until
+    // then the interface is veiled and inert: in the Python build the first
+    // LAUNCH used to lazily import cv2 and pyautogui, a measured ~1s stall.
+    in property <bool> ready: false;
+    // Lifted by the failsafe below, so a backend that dies before signalling
+    // cannot leave the window locked for good.
+    property <bool> startup-gave-up: false;
+    property <bool> ready-acknowledged: false;
+    property <bool> gated: !root.ready && !root.startup-gave-up;
+
+    // Same reasoning as first_paint.rs's REVEAL_DEADLINE: a window that never
+    // becomes usable is worse than the glitch being avoided.
+    Timer {
+        interval: 5s;
+        running: root.gated;
+        triggered => { root.startup-gave-up = true; }
+    }
+
     // --- Modal State ---
     in-out property <bool> show-settings: false;
     in-out property <string> phone-name: "";
@@ -129,6 +148,12 @@ export component MainWindow inherits Window {
     VerticalBox {
         padding: 20px;
         spacing: 15px;
+
+        // Slint has no blur filter — the only `blur` in the toolkit is a
+        // drop-shadow radius — so "starting up" reads as a fade behind the
+        // scrim below, which is the nearest thing it can actually render.
+        opacity: root.gated ? 0.35 : 1.0;
+        animate opacity { duration: 250ms; }
 
         // 0. Status Row — on the same grid as everything below: MIDI flush
         // left, Defender on the window centre, Shutdown flush right.
@@ -164,7 +189,7 @@ export component MainWindow inherits Window {
 
                 DefenderButton {
                     active: root.manage-defender;
-                    btn-enabled: root.buttons-enabled && !root.show-settings;
+                    btn-enabled: root.buttons-enabled && !root.show-settings && !root.gated;
                     y: (parent.height - self.height) / 2;
                     clicked => {
                         root.manage-defender = !root.manage-defender;
@@ -180,7 +205,7 @@ export component MainWindow inherits Window {
                 Switch {
                     text: "Shutdown";
                     checked <=> root.shutdown-after-clear;
-                    enabled: root.buttons-enabled && !root.show-settings;
+                    enabled: root.buttons-enabled && !root.show-settings && !root.gated;
                     y: (parent.height - self.height) / 2;
                     toggled => { root.shutdown-toggled(self.checked); }
                 }
@@ -194,7 +219,7 @@ export component MainWindow inherits Window {
 
             DarkButton {
                 btn-text: root.clear-text;
-                btn-enabled: root.buttons-enabled && !root.show-settings;
+                btn-enabled: root.buttons-enabled && !root.show-settings && !root.gated;
                 height: 60px;
                 min-width: 200px;
                 clicked => { root.clear-clicked(); }
@@ -203,7 +228,7 @@ export component MainWindow inherits Window {
             // Reused DarkButton instead of raw Rectangle
             DarkButton {
                 btn-text: root.launch-text;
-                btn-enabled: root.buttons-enabled && !root.show-settings;
+                btn-enabled: root.buttons-enabled && !root.show-settings && !root.gated;
                 btn-color: #007acc;
                 btn-color-disabled: #004c80;
                 height: 60px;
@@ -263,12 +288,63 @@ export component MainWindow inherits Window {
                 btn-text: "⚙ Settings";
                 height: 50px;
                 min-width: 130px;
-                btn-enabled: root.buttons-enabled && !root.show-settings;
+                btn-enabled: root.buttons-enabled && !root.show-settings && !root.gated;
                 clicked => {
                     root.settings-opened();
                     root.show-settings = true;
                 }
             }
+        }
+    }
+
+    // ==========================================
+    // STARTUP GATE LAYER
+    // ==========================================
+    // Swallows every press while the backend is still starting, the same way
+    // the settings overlay below does. Disabling the buttons alone would not be
+    // enough: this also stops a click on LAUNCH landing during startup and
+    // firing the moment the veil lifts.
+    if (root.gated) : Rectangle {
+        width: parent.width;
+        height: parent.height;
+        background: #00000066;
+
+        TouchArea {
+            width: 100%;
+            height: 100%;
+        }
+    }
+
+    // "Ready !" — shown when the backend signals, and it takes itself away.
+    // The Timer sits inside the conditional so it starts when the toast
+    // appears; nothing in either backend is involved in dismissing it, which
+    // is what keeps the behaviour identical in both versions.
+    if (root.ready && !root.ready-acknowledged) : Rectangle {
+        x: (parent.width - self.width) / 2;
+        y: 14px;
+        width: 130px;
+        height: 38px;
+        border-radius: 19px;
+        background: #2f3f34;
+        border-width: 1px;
+        border-color: #3ddc63;
+
+        drop-shadow-color: #000000;
+        drop-shadow-blur: 12px;
+        drop-shadow-offset-y: 4px;
+
+        Text {
+            text: "Ready !";
+            color: #3ddc63;
+            font-size: 15px;
+            font-weight: 700;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+
+        Timer {
+            interval: 2s;
+            triggered => { root.ready-acknowledged = true; }
         }
     }
 
