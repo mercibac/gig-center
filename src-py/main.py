@@ -63,6 +63,24 @@ def save_settings(data):
 console_queue = queue.Queue()
 
 
+# ==========================================
+# UI COMPILATION
+# ==========================================
+_components = None
+
+
+def load_ui():
+    """Compile ui/app.slint once.
+
+    The splash and the main window both come from it, and compiling it twice
+    would pay for the whole UI twice on the startup path.
+    """
+    global _components
+    if _components is None:
+        _components = slint.load_file(resource_path("ui/app.slint"))
+    return _components
+
+
 class ConsoleRedirector:
     def write(self, string):
         if string:  # Only queue non-empty strings
@@ -82,9 +100,7 @@ class GigControlApp:
     def __init__(self):
         self.settings = load_settings()
 
-        # Load Slint UI (optimized path)
-        components = slint.load_file(resource_path("ui/app.slint"))
-        self.app = components.MainWindow()
+        self.app = load_ui().MainWindow()
 
         # Load initial settings into UI properties
         self.app.phone_name = self.settings.get("phone_name", "")
@@ -107,16 +123,11 @@ class GigControlApp:
         self.midi_released = False
         self.refresh_midi_devices(announce=True)
 
-        # Enumerating MIDI ports costs well under a millisecond, so it stays on
-        # the startup path above. Enumerating audio endpoints measures ~180ms —
-        # pycaw builds a property store per device — so it waits for a one-shot
-        # timer and the window paints first. single_shot is static and keeps
-        # itself alive until it fires, so there is nothing to hold onto.
+        # Enumerating audio endpoints measures ~180ms, because pycaw builds a
+        # property store per device. It is not done here: the splash sequence
+        # runs it as its own announced step, so the user watches it happen
+        # instead of waiting on it.
         self.audio = audio_input.AudioMeter()
-        slint.Timer.single_shot(
-            datetime.timedelta(milliseconds=50),
-            lambda: self.refresh_audio_devices(announce=True),
-        )
 
         # Optimized timer: 100ms instead of 50ms reduces overhead
         self.console_timer = slint.Timer()
@@ -136,9 +147,9 @@ class GigControlApp:
             self.poll_midi,
         )
 
-        # Held because dropping the timer would stop the retries before the
-        # window winit creates has appeared.
-        self.window_timer = window_setup.apply()
+        # Centring and the title-bar icon are not applied here: the window is
+        # not shown until the splash hands over, and run_with_splash dresses it
+        # at that point. Doing it here as well would dress the splash twice.
 
         # Connect UI Callbacks to Python functions
         self.app.launch_clicked = self.run_launch_script
@@ -364,6 +375,113 @@ class GigControlApp:
 
 
 # ==========================================
+# STARTUP SEQUENCE
+# ==========================================
+# How often the splash advances a step. Long enough that the animation gets a
+# frame or two between the blocking pieces, short enough not to pad startup.
+STEP_INTERVAL = datetime.timedelta(milliseconds=60)
+
+# Logical size of the main window, mirroring preferred-width/height in
+# ui/app.slint. Kept here because the window has to be sized explicitly once a
+# splash exists — see window_setup._resize.
+MAIN_WINDOW_SIZE = (800, 600)
+
+
+def _warm_up(done):
+    """Pre-import the launch module, off the UI thread.
+
+    Measured at 958ms: cv2, pyautogui and numpy, pulled in by gig_launcher.
+    That used to be paid on the user's first LAUNCH click; behind the splash it
+    is paid where it can be watched instead. gig_launcher is only function
+    definitions, so importing it early has no side effects.
+
+    Runs on its own thread, so it must not touch Slint — it only sets an Event.
+    """
+    try:
+        import gig_launcher  # noqa: F401
+    except Exception as e:
+        # A failed warm-up must never strand the user on the splash. The click
+        # path imports it again and will report the real error there.
+        print(f"Warning: could not pre-load the launch module: {e}")
+    finally:
+        done.set()
+
+
+def run_with_splash():
+    """Show the splash, do the slow work behind it, then hand over.
+
+    The main window is never shown until everything is ready, so there is no
+    window to click into while it is still starting.
+
+    Each step announces itself and then yields to the event loop before doing
+    its work, so the label is on screen while the work happens rather than
+    after it.
+    """
+    splash = load_ui().SplashWindow()
+    splash.logo = slint.Image.load_from_path(resource_path("assets/splash_logo.png"))
+    splash.shine = slint.Image.load_from_path(resource_path("assets/splash_shine.png"))
+    splash.show()
+
+    # Held: dropping either timer stops the retries that centre the windows.
+    held = {"splash_timer": window_setup.apply()}
+
+    warm_done = threading.Event()
+    threading.Thread(target=_warm_up, args=(warm_done,), daemon=True).start()
+
+    def build_app():
+        held["app"] = GigControlApp()
+
+    def list_audio():
+        held["app"].refresh_audio_devices(announce=True)
+
+    steps = [
+        ("Starting MIDI…", build_app),
+        ("Listing audio outputs…", list_audio),
+    ]
+
+    timer = slint.Timer()
+    state = {"step": 0, "announced": False}
+
+    def pump():
+        step = state["step"]
+
+        if step >= len(steps):
+            # Everything on the UI thread is done; the import may still be
+            # running, and the splash waits for it rather than handing over to
+            # a window whose first click would stall.
+            if not warm_done.is_set():
+                splash.status = "Loading launch module…"
+                return
+            timer.stop()
+            hand_over()
+            return
+
+        label, work = steps[step]
+        if not state["announced"]:
+            splash.status = label
+            state["announced"] = True
+            return  # let it paint before blocking on the work
+
+        work()
+        state["step"] += 1
+        state["announced"] = False
+
+    def hand_over():
+        app = held["app"]
+        # Shown before the splash is hidden, so the event loop is never left
+        # without a window — that would end it and close the app.
+        app.app.show()
+        # The size is forced because a Slint window that is not the only one on
+        # screen does not take its preferred-width/height — measured at 668x398
+        # against 1018x797 on its own. It matches app.slint's preferred size.
+        held["window_timer"] = window_setup.apply(size=MAIN_WINDOW_SIZE)
+        splash.hide()
+
+    timer.start(slint.TimerMode.Repeated, STEP_INTERVAL, pump)
+    slint.run_event_loop()
+
+
+# ==========================================
 # APP ENTRY POINT
 # ==========================================
 if __name__ == "__main__":
@@ -373,6 +491,5 @@ if __name__ == "__main__":
     my_app_id = "gig_control.rig.launcher.1"
     ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(my_app_id)
 
-    app = GigControlApp()
-    app.run()
+    run_with_splash()
 

@@ -1,4 +1,9 @@
 import { LineEdit, VerticalBox, ScrollView, HorizontalBox, ComboBox, Switch } from "std-widgets.slint";
+import { SplashWindow } from "splash.slint";
+
+// Re-exported so both builds keep a single compile entry: build.rs compiles
+// this file, and slint.load_file loads this file.
+export { SplashWindow }
 
 // ==========================================
 // CUSTOM BUTTON COMPONENT (Optimized)

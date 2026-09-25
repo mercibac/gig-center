@@ -25,6 +25,7 @@ IMAGE_ICON = 1
 LR_LOADFROMFILE = 0x0010
 
 SWP_NOSIZE = 0x0001
+SWP_NOMOVE = 0x0002
 SWP_NOZORDER = 0x0004
 SWP_NOACTIVATE = 0x0010
 
@@ -67,6 +68,16 @@ _user32.SendMessageW.argtypes = [
 ]
 _user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, wintypes.LPDWORD]
 _user32.GetWindowRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
+_user32.GetClientRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
+
+# Windows 10 1607 and later. Absent on older builds, where the system DPI is
+# the best available answer.
+try:
+    _user32.GetDpiForWindow.argtypes = [wintypes.HWND]
+    _user32.GetDpiForWindow.restype = wintypes.UINT
+    _HAS_WINDOW_DPI = True
+except AttributeError:  # pragma: no cover - depends on the Windows build
+    _HAS_WINDOW_DPI = False
 _user32.SetWindowPos.argtypes = [
     wintypes.HWND,
     wintypes.HWND,
@@ -80,20 +91,45 @@ _user32.SetWindowPos.argtypes = [
 _WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
 
 
-def _main_window():
-    """This process's top-level window, or None before it exists.
+# Windows already dressed, so a second apply() moves on to the next one rather
+# than finding the first again. The splash and the main window share a title,
+# and hiding the splash does not remove it from EnumWindows, so without this
+# the main window would never be centred.
+_dressed = set()
 
-    Matched on having a title: winit also owns an untitled helper window and an
-    IME window, and both are there from the start. Visibility is deliberately
-    not required — catching the window the moment it is created, rather than
-    once it is on screen, is what keeps the centring from being seen.
+
+def _has_area(hwnd):
+    """Whether the window occupies any space at all.
+
+    A title is not enough to identify the app's own window. Enumerated live,
+    this process owns four titled windows: the two real ones, plus 'MSCTFIME
+    UI' and 'Default IME', which Windows creates for input methods. Both of
+    those measure 0x0, and neither should ever be moved or given an icon.
+    """
+    frame = wintypes.RECT()
+    if not _user32.GetWindowRect(hwnd, ctypes.byref(frame)):
+        return False
+    return frame.right > frame.left and frame.bottom > frame.top
+
+
+def _next_window():
+    """This process's next undressed top-level window, or None.
+
+    Visibility is deliberately not required — catching the window the moment it
+    is created, rather than once it is on screen, is what keeps the centring
+    from being seen.
     """
     found = []
 
     def visit(hwnd, _lparam):
         pid = wintypes.DWORD()
         _user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
-        if pid.value == os.getpid() and _user32.GetWindowTextLengthW(hwnd) > 0:
+        if (
+            pid.value == os.getpid()
+            and _user32.GetWindowTextLengthW(hwnd) > 0
+            and hwnd not in _dressed
+            and _has_area(hwnd)
+        ):
             found.append(hwnd)
             return False  # stop the enumeration
         return True
@@ -121,6 +157,50 @@ def _set_icon(hwnd, ico_path):
             return False
         _user32.SendMessageW(hwnd, WM_SETICON, which, handle)
     return True
+
+
+def _physical_size(hwnd, logical):
+    """Physical window size for a logical client size, at this window's DPI.
+
+    The frame — border and title bar — is measured rather than assumed: it is
+    whatever the window rect has that the client rect does not.
+    """
+    client = wintypes.RECT()
+    frame = wintypes.RECT()
+    if not _user32.GetClientRect(hwnd, ctypes.byref(client)):
+        return None
+    if not _user32.GetWindowRect(hwnd, ctypes.byref(frame)):
+        return None
+
+    dpi = _user32.GetDpiForWindow(hwnd) if _HAS_WINDOW_DPI else 0
+    scale = (dpi or 96) / 96
+    border_w = (frame.right - frame.left) - (client.right - client.left)
+    border_h = (frame.bottom - frame.top) - (client.bottom - client.top)
+    return (
+        round(logical[0] * scale) + border_w,
+        round(logical[1] * scale) + border_h,
+    )
+
+
+def _resize(hwnd, logical):
+    """Give the window its intended size.
+
+    Needed because a Slint window that is not the only one on screen does not
+    take its preferred-width/height: measured, the main window opened at
+    668x398 when a splash existed, against 1018x797 on its own. The Python
+    binding exposes no way to resize — setting .width and .height on the
+    component does nothing — so it is done here, with the rest of the dressing
+    Slint cannot do.
+    """
+    size = _physical_size(hwnd, logical)
+    if size is None:
+        return False
+    return bool(
+        _user32.SetWindowPos(
+            hwnd, None, 0, 0, size[0], size[1],
+            SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE,
+        )
+    )
 
 
 def _center(hwnd):
@@ -152,8 +232,14 @@ def _center(hwnd):
     )
 
 
-def apply():
-    """Start dressing the main window, and return the timer driving the retries.
+def apply(size=None):
+    """Start dressing the next undressed window, and return the retry timer.
+
+    Called once for the splash and again for the main window; each call takes
+    the next window this process has not already handled.
+
+    `size` is a logical (width, height) to force, for a window that will not
+    take its own preferred size — see _resize. Omit it to leave the size alone.
 
     The caller has to hold on to the returned timer: dropping it stops the
     retries before the window has been found.
@@ -165,8 +251,12 @@ def apply():
     def tick():
         nonlocal attempts
         attempts += 1
-        hwnd = _main_window()
+        hwnd = _next_window()
         if hwnd is not None:
+            _dressed.add(hwnd)
+            if size is not None:
+                _resize(hwnd, size)
+            # Centred after any resize, so the new size is what gets centred.
             _center(hwnd)
             if os.path.exists(ico_path):
                 _set_icon(hwnd, ico_path)

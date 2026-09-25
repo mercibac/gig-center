@@ -36,11 +36,6 @@ use windows::Win32::UI::WindowsAndMessaging::{
     WH_CALLWNDPROC, WINDOW_STYLE, WM_CREATE, WS_CAPTION, WS_CHILD,
 };
 
-/// How long the window may stay cloaked before it is revealed regardless. Only
-/// reachable if the first frame never lands — an unrevealed window would be an
-/// app that never appears, which is worse than the flash.
-const REVEAL_DEADLINE: Duration = Duration::from_millis(1000);
-
 /// The cloaked window, or 0 while there isn't one. Raw, because `HWND` is a
 /// pointer and this has to live in a static.
 static CLOAKED: AtomicIsize = AtomicIsize::new(0);
@@ -71,6 +66,19 @@ fn take_deferred_work() -> Option<Box<dyn FnOnce()>> {
 /// to uncloak.
 static REVEALED: AtomicBool = AtomicBool::new(false);
 
+/// Arm the cloak again, for the next window to be created.
+///
+/// This module was written when there was one window. With a splash there are
+/// two, each needing the same treatment, and which one the creation hook claims
+/// is not something the caller controls: measured, winit creates the splash's
+/// OS window first even when the main window is shown first. So rather than
+/// trying to steer the hook, each window arms it in turn — the splash before it
+/// is shown, the main window before it replaces the splash.
+pub fn rearm() {
+    REVEALED.store(false, Ordering::Relaxed);
+    start();
+}
+
 /// Arrange for the next window created on this thread to come up cloaked. Call
 /// before anything creates a window; the window itself is created much later,
 /// from inside the event loop.
@@ -92,16 +100,23 @@ pub fn start() {
 /// Install the event loop hook that reveals the window after its first frame.
 pub fn configure(selector: slint::BackendSelector) -> slint::BackendSelector {
     selector.with_winit_custom_application_handler(RevealOnFirstFrame {
-        drawn: false,
-        revealed: false,
+        seen: Vec::new(),
+        pending_reveal: false,
+        revealed_any: false,
     })
 }
 
 /// Start the safety net that reveals the window even if no frame arrives. Needs
 /// a backend, so call it after one has been selected and before the event loop
 /// runs.
-pub fn arm_deadline() {
-    slint::Timer::single_shot(REVEAL_DEADLINE, reveal);
+///
+/// `within` is how long to wait. Only reachable if the reveal never happens —
+/// an unrevealed window would be an app that never appears, which is worse than
+/// the flash this module exists to remove. With a splash holding the window the
+/// wait has to be generous, because it is the backend being waited on and a
+/// cold boot is slow.
+pub fn arm_deadline(within: Duration) {
+    slint::Timer::single_shot(within, reveal);
 }
 
 /// Put the window into composition, if it isn't there already. Idempotent, and
@@ -124,39 +139,52 @@ pub fn reveal() {
 /// the loop is about to wait again — the same signal [`crate::startup_probe`]
 /// times, which is why it is reported from here rather than measured twice.
 struct RevealOnFirstFrame {
-    drawn: bool,
-    revealed: bool,
+    /// Windows that have had their first frame. Each is centred and revealed
+    /// once, on its own first frame: with a splash there are two, and a single
+    /// flag would serve whichever drew first and leave the other off-centre and
+    /// cloaked.
+    seen: Vec<WindowId>,
+    /// A window drew for the first time and is waiting to be put into
+    /// composition, once the loop is about to wait and the frame is finished.
+    pending_reveal: bool,
+    /// The deferred work runs once per arming, not once per process: the splash
+    /// arms it for startup, and the handover arms it again to dismiss itself.
+    revealed_any: bool,
 }
 
 impl CustomApplicationHandler for RevealOnFirstFrame {
     fn window_event(
         &mut self,
         _event_loop: &ActiveEventLoop,
-        _window_id: WindowId,
+        window_id: WindowId,
         winit_window: Option<&slint::winit_030::winit::window::Window>,
         _slint_window: Option<&slint::Window>,
         event: &WindowEvent,
     ) -> EventResult {
         if matches!(event, WindowEvent::RedrawRequested) {
             // Centring lives here because this is the one place holding the
-            // winit window, and the last moment the window is still cloaked —
-            // moving it now is a move nobody sees. The size is final by the
-            // first frame; before it, there is nothing to centre.
-            if !self.drawn {
+            // winit window, and — for the main window — the last moment it is
+            // still cloaked, so moving it is a move nobody sees. The size is
+            // final by the first frame; before it, there is nothing to centre.
+            if !self.seen.contains(&window_id) {
+                self.seen.push(window_id);
                 if let Some(window) = winit_window {
                     crate::center::on_primary_monitor(window);
                 }
+                self.pending_reveal = true;
             }
-            self.drawn = true;
         }
         EventResult::Propagate
     }
 
     fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) -> EventResult {
-        if self.drawn && !self.revealed {
-            self.revealed = true;
+        if self.pending_reveal {
+            self.pending_reveal = false;
             reveal();
-            crate::startup_probe::note_first_frame();
+            if !self.revealed_any {
+                self.revealed_any = true;
+                crate::startup_probe::note_first_frame();
+            }
 
             // Only now that the window is up, and the startup timing is
             // recorded, is it safe to spend time on anything else.

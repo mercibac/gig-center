@@ -15,6 +15,7 @@ mod ncc;
 mod screen;
 mod settings;
 mod snap;
+mod splash_art;
 mod startup_probe;
 mod switch_defender;
 mod switch_sleep;
@@ -27,6 +28,33 @@ use std::thread;
 use std::time::Duration;
 
 slint::include_modules!();
+
+/// How long the splash may hold the main window back before it is revealed
+/// regardless. Only reachable if the startup work never finishes — a window
+/// that never appears is worse than one that appears too early.
+const SPLASH_DEADLINE: Duration = Duration::from_secs(20);
+
+/// Logical size of the main window, mirroring preferred-width/height in
+/// ui/app.slint. Needed explicitly because the splash is created first, and a
+/// window that is not the first one created does not take its preferred size.
+const MAIN_WIDTH: f32 = 800.0;
+const MAIN_HEIGHT: f32 = 600.0;
+
+thread_local! {
+    /// The splash, while it is up. Held here because the deferred work that
+    /// dismisses it runs from the event loop, not from `main`'s scope, and
+    /// dropping the component would close the window at the wrong moment.
+    static SPLASH: RefCell<Option<SplashWindow>> = const { RefCell::new(None) };
+}
+
+/// Narrate what startup is doing, if the splash is still up.
+fn splash_status(text: &str) {
+    SPLASH.with(|slot| {
+        if let Some(splash) = slot.borrow().as_ref() {
+            splash.set_status(text.into());
+        }
+    });
+}
 
 fn main() -> Result<(), slint::PlatformError> {
     startup_probe::start();
@@ -85,13 +113,41 @@ fn main() -> Result<(), slint::PlatformError> {
     // and pushed startup from ~70ms to ~200ms, so it waits for the window.
     {
         let app_weak_devices = app.as_weak();
+        let app_weak_handover = app.as_weak();
         let midi_for_devices = Rc::clone(&midi);
         let released_for_devices = Rc::clone(&midi_released);
         let audio_for_devices = Rc::clone(&audio);
         first_paint::run_after_first_frame(move || {
             if let Some(app) = app_weak_devices.upgrade() {
+                splash_status("Starting MIDI…");
                 refresh_midi_devices(&app, &midi_for_devices, &released_for_devices, true);
+                splash_status("Listening for audio…");
                 refresh_audio_devices(&app, &audio_for_devices, true);
+            }
+            // The backend is ready, so the main window can take the screen.
+            //
+            // It arms the cloak for itself, exactly as the splash did, so it is
+            // created out of composition, laid out, centred and painted before
+            // anyone sees it — no white flash as it replaces the splash. The
+            // splash is dismissed from the deferred slot, which runs after that
+            // reveal, so the screen is never left with nothing on it.
+            first_paint::rearm();
+            first_paint::run_after_first_frame(|| {
+                SPLASH.with(|slot| {
+                    if let Some(splash) = slot.borrow_mut().take() {
+                        let _ = splash.hide();
+                    }
+                });
+            });
+            if let Some(app) = app_weak_handover.upgrade() {
+                // Sized explicitly because a window that is not the first one
+                // created does not take its preferred size: measured 640x480
+                // against the 800x600 app.slint asks for. Set before showing,
+                // so it is laid out and centred at the right size while it is
+                // still cloaked.
+                app.window()
+                    .set_size(slint::LogicalSize::new(MAIN_WIDTH, MAIN_HEIGHT));
+                let _ = app.show();
             }
         });
     }
@@ -274,8 +330,25 @@ Windows Defender step: {}",
     });
 
     startup_probe::mark("ui_init");
-    first_paint::arm_deadline();
-    app.run()
+
+    // Only the splash is shown now. The main window exists and is wired up, but
+    // stays unshown until the backend is ready, so there is no window to click
+    // into while it is still starting.
+    let splash = SplashWindow::new()?;
+    if let Some(logo) = splash_art::logo() {
+        splash.set_logo(logo);
+    }
+    if let Some(shine) = splash_art::shine() {
+        splash.set_shine(shine);
+    }
+    splash.show()?;
+    SPLASH.with(|slot| *slot.borrow_mut() = Some(splash));
+
+    // Generous, because this is only the safety net: the splash normally ends
+    // when the backend says so, and a cold boot is slow. Left in because a
+    // window that never appears is worse than one that appears too early.
+    first_paint::arm_deadline(SPLASH_DEADLINE);
+    slint::run_event_loop()
 }
 
 /// Re-read the connected devices and (re)open the one to listen on.

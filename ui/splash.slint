@@ -1,0 +1,143 @@
+// ==========================================
+// SPLASH SCREEN
+// ==========================================
+// Shown on its own borderless window while the backend starts, and replaced by
+// the main window once it is ready. Kept in its own file because it shares
+// nothing with the main UI but the colour palette; app.slint re-exports it so
+// both builds still compile a single entry point.
+//
+// The animation lives entirely here, so it cannot drift between the Rust and
+// Python versions. A negative `iteration-count` means "forever" (verified in
+// i-slint-core's properties_animations.rs), and `direction: alternate` makes
+// the value ping-pong rather than snap back.
+
+export component SplashWindow inherits Window {
+    title: "Gig Control Center";
+    // Borderless and above everything, the way a splash should behave. Both
+    // are real WindowItem properties.
+    no-frame: true;
+    always-on-top: true;
+
+    width: 520px;
+    height: 340px;
+    background: #0e0e11;
+
+    // The backend supplies the artwork and narrates what it is doing.
+    //
+    // The shine is an image rather than a gradient brush because its falloff is
+    // shaped precisely in assets/make_splash_logo.py — a raised cosine, so the
+    // edges vanish instead of ending. Both renderers this project uses do
+    // support gradients; this is a choice about control, not capability.
+    in property <image> logo;
+    in property <image> shine;
+    in property <string> status: "Starting…";
+
+    // An `animate` block only runs when the value it watches moves, so nothing
+    // would ever animate on a screen that simply appears. `init` flips this
+    // once, which is the change every animation below hangs off.
+    property <bool> running: false;
+    init => {
+        root.running = true;
+    }
+
+    // The face of the disc occupies 75% of the asset's canvas and sits 2%
+    // above its centre — see assets/make_splash_logo.py, where the 480px face
+    // is inset in a 640px canvas with the extrusion below it. The shine has to
+    // be clipped to exactly that circle, or it would streak across the
+    // transparent corners.
+    property <length> logo-box: root.running ? 210px : 178px;
+    property <length> disc: root.logo-box * 0.75;
+    property <length> disc-cx: (root.width - root.disc) / 2;
+    property <length> disc-cy: 46px + (root.logo-box - root.disc) / 2 - root.logo-box * 0.0203;
+
+    animate logo-box {
+        duration: 700ms;
+        easing: ease-out;
+    }
+
+    // --- the logo ----------------------------------------------------------
+    // The asset carries its own drop shadow, so nothing is needed behind it.
+    Image {
+        source: root.logo;
+        width: root.logo-box;
+        height: root.logo-box;
+        x: (root.width - self.width) / 2;
+        y: 46px;
+        image-fit: contain;
+
+        opacity: root.running ? 1.0 : 0.0;
+        animate opacity {
+            duration: 600ms;
+            easing: ease-out;
+        }
+    }
+
+    // --- the shine sweeping across it --------------------------------------
+    // Circular clip so the highlight only ever falls on the disc. Sweeps left
+    // to right forever; `direction` stays normal so it always travels the same
+    // way, the way a light passing over a polished surface does.
+    Rectangle {
+        x: root.disc-cx;
+        y: root.disc-cy;
+        width: root.disc;
+        height: root.disc;
+        border-radius: self.width / 2;
+        clip: true;
+        opacity: root.running ? 1.0 : 0.0;
+        animate opacity {
+            duration: 900ms;
+            easing: ease-out;
+        }
+
+        Image {
+            source: root.shine;
+            width: 86px;
+            height: parent.height * 2;
+            y: -parent.height / 2;
+
+            x: root.running ? parent.width + 80px : -100px;
+            animate x {
+                duration: 2600ms;
+                delay: 400ms;
+                iteration-count: -1;
+                easing: ease-in-out;
+            }
+        }
+    }
+
+    // --- wordmark and status ----------------------------------------------
+    Text {
+        text: "GIG CONTROL CENTER";
+        color: #e8e8ee;
+        font-size: 19px;
+        font-weight: 700;
+        letter-spacing: 3px;
+        horizontal-alignment: center;
+        width: root.width;
+        y: 272px;
+
+        opacity: root.running ? 1.0 : 0.0;
+        animate opacity {
+            duration: 700ms;
+            delay: 250ms;
+            easing: ease-out;
+        }
+    }
+
+    Text {
+        text: root.status;
+        color: #7d7d8c;
+        font-size: 12px;
+        horizontal-alignment: center;
+        width: root.width;
+        y: 302px;
+    }
+
+    // A hairline along the bottom, so the frameless window still has an edge.
+    Rectangle {
+        y: root.height - 1px;
+        width: root.width;
+        height: 1px;
+        background: #26262e;
+    }
+}
