@@ -10,14 +10,48 @@
 //! subsystem is warm, and it owns Slint models and the `Rc<RefCell<…>>` state
 //! every callback shares.
 
-use std::sync::mpsc::{self, Receiver, RecvTimeoutError, TryRecvError};
+use std::cell::RefCell;
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
 use std::thread;
 use std::time::Duration;
 
 /// What the worker found.
+#[derive(Clone, Default)]
 pub struct Devices {
     pub midi: Vec<String>,
     pub audio: Vec<String>,
+}
+
+thread_local! {
+    /// What to do with the devices once they exist, parked here until they do.
+    ///
+    /// Lives in a thread-local because applying them needs the `Rc<RefCell<…>>`
+    /// state every callback shares, which cannot cross threads — the same
+    /// reason, and the same shape, as `first_paint::run_after_first_frame`.
+    static ON_READY: RefCell<Option<Box<dyn FnOnce(Devices)>>> = const { RefCell::new(None) };
+}
+
+/// Register what to do when the devices arrive. Call from the UI thread, and
+/// before anything can deliver.
+pub fn on_ready(handler: impl FnOnce(Devices) + 'static) {
+    ON_READY.with(|slot| *slot.borrow_mut() = Some(Box::new(handler)));
+}
+
+/// Hand the devices over, if nobody has already.
+///
+/// Taking the handler out of the slot is what makes this exactly-once, and that
+/// is the whole point: the quick path calls this directly, the worker's pushed
+/// call calls it from the event loop, and a deadline may call it too. Whichever
+/// arrives first wins and the rest are no-ops, with no flag to get wrong.
+///
+/// The previous design polled instead, and treated a closed channel as failure
+/// — but a channel closes as a matter of course once the worker has delivered,
+/// so every poll after the first re-applied empty device lists, printing "No
+/// MIDI device connected." and closing both devices 33 times a second.
+pub fn deliver(devices: Devices) {
+    if let Some(handler) = ON_READY.with(|slot| slot.borrow_mut().take()) {
+        handler(devices);
+    }
 }
 
 /// How the probe is getting on.
@@ -42,9 +76,16 @@ pub fn probe() -> Receiver<Devices> {
             midi: crate::midi_input::list_devices(),
             audio: crate::audio_input::list_devices(),
         };
-        // Fails only if startup was abandoned and the receiver dropped, in
-        // which case there is nobody left to tell.
-        let _ = tx.send(devices);
+
+        // Announced twice, on purpose, because the two readers want it at
+        // different moments and neither knows which will get there first.
+        //
+        // The channel answers the question startup blocks on: "is this done
+        // yet?". The pushed call is how the answer arrives when it is not —
+        // queued onto the UI thread, run once the event loop is up. Both end at
+        // `deliver`, which only lets one of them through.
+        let _ = tx.send(devices.clone());
+        let _ = slint::invoke_from_event_loop(move || deliver(devices));
     });
     rx
 }
@@ -62,18 +103,10 @@ pub fn wait_for(rx: &Receiver<Devices>, grace: Duration) -> Probe {
     }
 }
 
-/// Check the probe without waiting, for the splash to poll.
-pub fn poll(rx: &Receiver<Devices>) -> Probe {
-    match rx.try_recv() {
-        Ok(devices) => Probe::Ready(devices),
-        Err(TryRecvError::Empty) => Probe::Pending,
-        Err(TryRecvError::Disconnected) => Probe::Failed,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::rc::Rc;
 
     fn devices() -> Devices {
         Devices {
@@ -120,14 +153,33 @@ mod tests {
     }
 
     #[test]
-    fn polling_reports_the_same_three_states() {
-        let (tx, rx) = mpsc::channel();
-        assert!(matches!(poll(&rx), Probe::Pending));
+    fn the_devices_are_handed_over_exactly_once() {
+        // The invariant the old polling design broke: it re-applied empty
+        // device lists every 30ms after the first success, printing "No MIDI
+        // device connected." forever and closing both devices with it.
+        let handled = Rc::new(RefCell::new(Vec::new()));
 
-        tx.send(devices()).unwrap();
-        assert!(matches!(poll(&rx), Probe::Ready(_)));
+        let record = Rc::clone(&handled);
+        on_ready(move |found: Devices| record.borrow_mut().push(found.midi.len()));
 
-        drop(tx);
-        assert!(matches!(poll(&rx), Probe::Failed));
+        deliver(devices());
+        deliver(devices());
+        deliver(Devices::default());
+
+        assert_eq!(
+            *handled.borrow(),
+            vec![1],
+            "the handover ran more than once"
+        );
+    }
+
+    #[test]
+    fn delivering_with_nobody_waiting_does_nothing() {
+        // The ordinary case once the quick path has already handled it: the
+        // worker's pushed call still arrives, and must be a no-op rather than
+        // an error or a second handover.
+        ON_READY.with(|slot| *slot.borrow_mut() = None);
+
+        deliver(devices());
     }
 }

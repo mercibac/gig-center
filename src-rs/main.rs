@@ -50,9 +50,6 @@ const MAIN_HEIGHT: f32 = 600.0;
 /// latency and no visible stutter.
 const READY_GRACE: Duration = Duration::from_millis(100);
 
-/// How often the splash checks whether the backend has finished.
-const PROBE_INTERVAL: Duration = Duration::from_millis(30);
-
 /// Reveal deadline for the quick path, where only a frame is being waited on.
 const FIRST_FRAME_DEADLINE: Duration = Duration::from_millis(1000);
 
@@ -298,23 +295,77 @@ Windows Defender step: {}",
 
     startup_probe::mark("ui_init");
 
+    // Registered before anything can deliver. The worker's pushed call is
+    // queued and cannot run before the event loop, so it could not outrun this
+    // — but the quick path below calls deliver directly, and that could.
+    {
+        let app_weak_handover = app.as_weak();
+        let midi_for_handover = Rc::clone(&midi);
+        let released_for_handover = Rc::clone(&midi_released);
+        let audio_for_handover = Rc::clone(&audio);
+        backend::on_ready(move |found: backend::Devices| {
+            let Some(app) = app_weak_handover.upgrade() else {
+                return;
+            };
+            apply_midi_devices(
+                &app,
+                &midi_for_handover,
+                &released_for_handover,
+                found.midi,
+                true,
+            );
+            apply_audio_devices(&app, &audio_for_handover, found.audio, true);
+
+            // Only when a splash is on screen does the main window need the
+            // cloak armed for itself: it is then not the first window, so it
+            // would otherwise flash white as it replaces the splash. Armed, it
+            // is created out of composition, laid out, centred and painted
+            // before anyone sees it. The splash is dismissed from the deferred
+            // slot, which runs after that reveal, so the screen is never left
+            // with nothing on it.
+            if SPLASH.with(|slot| slot.borrow().is_some()) {
+                first_paint::rearm();
+                first_paint::run_after_first_frame(|| {
+                    SPLASH.with(|slot| {
+                        if let Some(splash) = slot.borrow_mut().take() {
+                            let _ = splash.hide();
+                        }
+                    });
+                });
+            }
+
+            // Sized explicitly because a window that is not the first one
+            // created does not take its preferred size: measured 640x480
+            // against the 800x600 app.slint asks for.
+            app.window()
+                .set_size(slint::LogicalSize::new(MAIN_WIDTH, MAIN_HEIGHT));
+            let _ = app.show();
+        });
+    }
+
     // The whole question: did the backend finish while the UI was being built?
     // Nothing is on screen yet, so waiting here is latency, not a freeze.
     //
-    // Kept alive past this point because the slow path polls it from a timer.
-    let poll_timer = Timer::default();
+    // Held past this point only to keep the fallback alive on the slow path.
+    let fallback = Timer::default();
     match backend::wait_for(&probe, READY_GRACE) {
+        // Quick path — a warm start. No splash is ever created.
         backend::Probe::Ready(devices) => {
-            // Quick path — a warm start. No splash is ever created.
-            apply_midi_devices(&app, &midi, &midi_released, devices.midi, true);
-            apply_audio_devices(&app, &audio, devices.audio, true);
-            app.window()
-                .set_size(slint::LogicalSize::new(MAIN_WIDTH, MAIN_HEIGHT));
-            app.show()?;
+            backend::deliver(devices);
             first_paint::arm_deadline(FIRST_FRAME_DEADLINE);
         }
-        _ => {
-            // Slow path — a cold boot. Show the splash and keep checking.
+
+        // The worker died, so nothing will ever arrive. Starting with no
+        // devices beats a splash that sits there until the deadline.
+        backend::Probe::Failed => {
+            console_log!("Could not list devices; starting without them.");
+            backend::deliver(backend::Devices::default());
+            first_paint::arm_deadline(FIRST_FRAME_DEADLINE);
+        }
+
+        // Slow path — a cold boot. The splash holds the screen until the
+        // worker's pushed call lands.
+        backend::Probe::Pending => {
             let splash = SplashWindow::new()?;
             if let Some(logo) = splash_art::logo() {
                 splash.set_logo(logo);
@@ -326,54 +377,12 @@ Windows Defender step: {}",
             splash.show()?;
             SPLASH.with(|slot| *slot.borrow_mut() = Some(splash));
 
-            let app_weak_handover = app.as_weak();
-            let midi_for_handover = Rc::clone(&midi);
-            let released_for_handover = Rc::clone(&midi_released);
-            let audio_for_handover = Rc::clone(&audio);
-            poll_timer.start(TimerMode::Repeated, PROBE_INTERVAL, move || {
-                let found = match backend::poll(&probe) {
-                    backend::Probe::Pending => return,
-                    backend::Probe::Ready(devices) => devices,
-                    // Nothing is coming. Start anyway with nothing enumerated,
-                    // rather than leaving the splash up for good.
-                    backend::Probe::Failed => backend::Devices {
-                        midi: Vec::new(),
-                        audio: Vec::new(),
-                    },
-                };
-
-                let Some(app) = app_weak_handover.upgrade() else {
-                    return;
-                };
-                apply_midi_devices(
-                    &app,
-                    &midi_for_handover,
-                    &released_for_handover,
-                    found.midi,
-                    true,
-                );
-                apply_audio_devices(&app, &audio_for_handover, found.audio, true);
-
-                // The main window arms the cloak for itself, exactly as the
-                // splash did, so it is created out of composition, laid out,
-                // centred and painted before anyone sees it — no white flash as
-                // it replaces the splash. The splash is dismissed from the
-                // deferred slot, which runs after that reveal, so the screen is
-                // never left with nothing on it.
-                first_paint::rearm();
-                first_paint::run_after_first_frame(|| {
-                    SPLASH.with(|slot| {
-                        if let Some(splash) = slot.borrow_mut().take() {
-                            let _ = splash.hide();
-                        }
-                    });
-                });
-                // Sized explicitly because a window that is not the first one
-                // created does not take its preferred size: measured 640x480
-                // against the 800x600 app.slint asks for.
-                app.window()
-                    .set_size(slint::LogicalSize::new(MAIN_WIDTH, MAIN_HEIGHT));
-                let _ = app.show();
+            // Last resort, should the worker never answer at all. Single-shot,
+            // deliberately: a repeating timer here is exactly what spammed the
+            // console before, and deliver's one-shot slot makes this harmless
+            // if the devices have already arrived.
+            fallback.start(TimerMode::SingleShot, SPLASH_DEADLINE, || {
+                backend::deliver(backend::Devices::default());
             });
 
             first_paint::arm_deadline(SPLASH_DEADLINE);
