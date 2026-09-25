@@ -8,6 +8,7 @@ import datetime
 
 # Lightweight config import
 from utils import CONFIG_FILE, bundled_settings, ensure_settings_file, resource_path
+import audio_input
 import midi_input
 import window_setup
 
@@ -18,6 +19,7 @@ DEFAULT_CONFIG = {
     "hotspot_name": "SHARED ACCESS POINT",
     "osc_file_path": "",
     "midi_device": "",
+    "audio_device": "",
     "shutdown_after_clear": False,
     "manage_defender": True,
 }
@@ -105,6 +107,17 @@ class GigControlApp:
         self.midi_released = False
         self.refresh_midi_devices(announce=True)
 
+        # Enumerating MIDI ports costs well under a millisecond, so it stays on
+        # the startup path above. Enumerating audio endpoints measures ~180ms —
+        # pycaw builds a property store per device — so it waits for a one-shot
+        # timer and the window paints first. single_shot is static and keeps
+        # itself alive until it fires, so there is nothing to hold onto.
+        self.audio = audio_input.AudioMeter()
+        slint.Timer.single_shot(
+            datetime.timedelta(milliseconds=50),
+            lambda: self.refresh_audio_devices(announce=True),
+        )
+
         # Optimized timer: 100ms instead of 50ms reduces overhead
         self.console_timer = slint.Timer()
         self.console_timer.start(
@@ -133,7 +146,7 @@ class GigControlApp:
         self.app.save_clicked = self.update_settings
         self.app.shutdown_toggled = self.update_shutdown_option
         self.app.defender_toggled = self.update_defender_option
-        self.app.settings_opened = self.refresh_midi_devices
+        self.app.settings_opened = self.refresh_devices
 
     def poll_console(self):
         texts = []
@@ -148,7 +161,10 @@ class GigControlApp:
             self.app.console_text += "".join(texts)
 
     def poll_midi(self):
+        # One timer drives both LEDs: they run at the same rate and neither
+        # does more than read a timestamp.
         self.app.midi_active = self.midi.is_active()
+        self.app.audio_active = self.audio.is_active()
 
     # --- MIDI Logic ---
     def refresh_midi_devices(self, announce=False):
@@ -179,6 +195,38 @@ class GigControlApp:
             else:
                 self.midi.close()
                 print("No MIDI device connected.")
+
+    def refresh_devices(self):
+        """Re-enumerate both kinds of device, for the settings modal.
+
+        Opening settings is the moment to notice a controller or an output that
+        appeared mid-session, so both lists are rebuilt together.
+        """
+        self.refresh_midi_devices()
+        self.refresh_audio_devices()
+
+    def refresh_audio_devices(self, announce=False):
+        """Re-read the audio outputs and (re)watch the one to meter.
+
+        Mirrors refresh_midi_devices, minus the release rule: nothing competes
+        with this app for a peak meter, so there is no reason to ever stop
+        watching.
+        """
+        devices = audio_input.list_devices()
+        self.app.audio_devices = slint.ListModel(devices)
+
+        wanted = audio_input.choose_device(
+            self.settings.get("audio_device", ""), devices
+        )
+        self.app.audio_device = wanted or ""
+
+        if wanted != self.audio.device or announce:
+            if wanted:
+                if self.audio.open(wanted):
+                    print(f"Watching audio on '{wanted}'.")
+            else:
+                self.audio.close()
+                print("No audio output found.")
 
     def release_midi(self):
         """Hand the MIDI input to Gig Performer.
@@ -273,11 +321,16 @@ class GigControlApp:
                 "osc_file_path": path.strip(),
                 "midi_device": self.app.midi_device
                 or self.settings.get("midi_device", ""),
+                "audio_device": self.app.audio_device
+                or self.settings.get("audio_device", ""),
             }
         )
 
         save_settings(self.settings)
+        # Follow what was just saved, so a newly chosen device takes effect
+        # without waiting for the next settings open or a restart.
         self.refresh_midi_devices()
+        self.refresh_audio_devices()
         print("\nSettings successfully updated and saved to settings.json.")
 
         # Close the modal by updating the Slint state property

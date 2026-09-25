@@ -10,6 +10,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import audio_input  # noqa: E402
 import midi_input  # noqa: E402
 
 
@@ -192,11 +193,13 @@ def test_saving_the_modal_preserves_settings_it_does_not_show(tmp_path, monkeypa
 
     class FakeUi:
         midi_device = "MPK mini 0"
+        audio_device = "Example Output (Generic Audio)"
         show_settings = True
 
     app = object.__new__(main.GigControlApp)
     app.app = FakeUi()
     app.refresh_midi_devices = lambda: None  # no hardware under test
+    app.refresh_audio_devices = lambda: None
     app.settings = {
         "phone_name": "old phone",
         "hotspot_name": "old hotspot",
@@ -435,11 +438,13 @@ def test_saving_while_unplugged_keeps_the_remembered_device(tmp_path, monkeypatc
 
     class UnpluggedUi:
         midi_device = ""  # nothing connected, so the ComboBox is empty
+        audio_device = ""
         show_settings = True
 
     app = object.__new__(main.GigControlApp)
     app.app = UnpluggedUi()
     app.refresh_midi_devices = lambda: None
+    app.refresh_audio_devices = lambda: None
     app.settings = {
         "phone_name": "Phone",
         "hotspot_name": "old hotspot",
@@ -468,11 +473,13 @@ def test_selecting_a_device_still_overwrites_the_stored_one(tmp_path, monkeypatc
 
     class PluggedUi:
         midi_device = "Launchkey 49 MIDI"
+        audio_device = "Example Output (Generic Audio)"
         show_settings = True
 
     app = object.__new__(main.GigControlApp)
     app.app = PluggedUi()
     app.refresh_midi_devices = lambda: None
+    app.refresh_audio_devices = lambda: None
     app.settings = {
         "phone_name": "Phone",
         "hotspot_name": "Hotspot",
@@ -484,3 +491,152 @@ def test_selecting_a_device_still_overwrites_the_stored_one(tmp_path, monkeypatc
 
     saved = json.loads(config.read_text())
     assert saved["midi_device"] == "Launchkey 49 MIDI"
+
+
+# ---------------------------------------------------------
+# Audio output fallback — same rule as MIDI, different hardware
+# ---------------------------------------------------------
+def test_saved_output_is_used_when_present():
+    available = ["Casque (Realtek(R) Audio)", "Speakers 01 (ASIOVADPRO Driver)"]
+    assert (
+        audio_input.choose_device("Speakers 01 (ASIOVADPRO Driver)", available)
+        == "Speakers 01 (ASIOVADPRO Driver)"
+    )
+
+
+def test_audio_falls_back_to_first_available():
+    # The saved output is switched off today, so meter whatever is live.
+    assert audio_input.choose_device("Speakers 01", ["Casque"]) == "Casque"
+
+
+def test_audio_falls_back_when_nothing_was_ever_saved():
+    assert audio_input.choose_device("", ["Casque"]) == "Casque"
+
+
+def test_no_output_when_none_are_active():
+    assert audio_input.choose_device("Casque", []) is None
+
+
+# ---------------------------------------------------------
+# Signal threshold — measured against this machine's endpoints
+# ---------------------------------------------------------
+def test_silence_does_not_count_as_signal():
+    # Every idle endpoint, ASIO ones included, reported exactly 0.0.
+    assert audio_input.is_signal(0.0) is False
+
+
+def test_real_playback_counts_as_signal():
+    # Sampled while audio played: 0.030809.
+    assert audio_input.is_signal(0.030809) is True
+
+
+def test_audio_led_starts_dark():
+    assert audio_input.AudioMeter().is_active() is False
+
+
+def test_audio_led_lights_then_decays():
+    meter = audio_input.AudioMeter()
+    meter.last_signal_at = 100.0
+
+    assert meter.is_active(now=100.0) is True
+    assert meter.is_active(now=100.0 + audio_input.ACTIVITY_WINDOW + 0.01) is False
+
+
+# ---------------------------------------------------------
+# Saving the output must both persist it and re-point the meter
+# ---------------------------------------------------------
+class _FakeMeter:
+    """Stands in for AudioMeter: records opens and closes, no COM, no threads."""
+
+    def __init__(self, device=None):
+        self.device = device
+        self.opened = []
+        self.closed = 0
+
+    def open(self, name):
+        self.opened.append(name)
+        self.device = name
+        return True
+
+    def close(self):
+        self.closed += 1
+        self.device = None
+
+
+def _save_app(monkeypatch, tmp_path, ui, stored, outputs=("Old Out", "New Out")):
+    import main
+
+    config = tmp_path / "settings.json"
+    monkeypatch.setattr(main, "CONFIG_FILE", str(config))
+    monkeypatch.setattr(main.audio_input, "list_devices", lambda: list(outputs))
+
+    app = object.__new__(main.GigControlApp)
+    app.app = ui
+    app.refresh_midi_devices = lambda: None  # MIDI is not what is under test
+    app.audio = _FakeMeter(device="Old Out")
+    app.settings = stored
+    return app, config
+
+
+def test_saving_rewatches_the_newly_chosen_output(tmp_path, monkeypatch):
+    """The whole point of the save-time refresh: the meter must follow."""
+
+    class Ui:
+        midi_device = ""
+        audio_device = "New Out"
+        audio_devices = None
+        show_settings = True
+
+    app, config = _save_app(
+        monkeypatch,
+        tmp_path,
+        Ui(),
+        {
+            "phone_name": "Phone",
+            "hotspot_name": "Hotspot",
+            "osc_file_path": "",
+            "midi_device": "",
+            "audio_device": "Old Out",
+        },
+    )
+
+    app.update_settings("Phone", "Hotspot", "")
+
+    assert json.loads(config.read_text())["audio_device"] == "New Out"
+    assert app.audio.opened == ["New Out"], "the meter kept watching the old output"
+
+
+def test_saving_with_an_empty_audio_dropdown_keeps_the_stored_output(
+    tmp_path, monkeypatch
+):
+    """The dropdown reads empty before enumeration finishes; taking that at face
+    value would throw the remembered output away."""
+
+    class Ui:
+        midi_device = ""
+        audio_device = ""  # nothing selected yet
+        audio_devices = None
+        show_settings = True
+
+    app, config = _save_app(
+        monkeypatch,
+        tmp_path,
+        Ui(),
+        {
+            "phone_name": "Phone",
+            "hotspot_name": "Hotspot",
+            "osc_file_path": "",
+            "midi_device": "",
+            "audio_device": "Old Out",
+        },
+    )
+
+    app.update_settings("Phone", "Hotspot", "")
+
+    assert json.loads(config.read_text())["audio_device"] == "Old Out"
+
+
+def test_audio_default_carries_the_new_key():
+    import main
+
+    assert main.DEFAULT_CONFIG["audio_device"] == ""
