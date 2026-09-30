@@ -96,6 +96,30 @@ export component MainWindow inherits Window {
     title: "Gig Control Center";
     preferred-width: 800px;
     preferred-height: 600px;
+
+    // A floor, so the window cannot be dragged into a size the layout cannot
+    // serve. The status row is the binding constraint: two fixed 220px columns
+    // either side of the 40px shield is 480px, plus 20px of padding a side, so
+    // 520px is the true minimum and this leaves a little slack.
+    //
+    // Both floors are set by the settings modal, which needs more room than the
+    // main screen does. Measured rather than guessed: a settings row cannot go
+    // below 170px label + 20px spacing + the dropdown's own minimum, and a
+    // ComboBox sizes itself to its longest item — 328px for an output named
+    // "Haut-parleur (Realtek(R) Audio)". With the panel's 24px padding a side
+    // and a 16px margin, that is ~598px, so 620px leaves a little headroom for
+    // a longer device name than any on this machine.
+    //
+    // Below this the modal could not shrink to fit, so it stayed wider than the
+    // window and, being centred, hung off both edges — which is how the labels
+    // came to lose their first characters off the left.
+    //
+    // The height floor works the same way: the modal caps at 520px plus margin,
+    // so 560px is enough, and it stays below the 600px the window opens at so a
+    // shorter-than-default window is still allowed.
+    min-width: 620px;
+    min-height: 560px;
+
     background: #2b2b2b;
 
     // --- Main State ---
@@ -292,12 +316,20 @@ export component MainWindow inherits Window {
         }
 
         // Settings box
+        //
+        // Sized to what the window can spare rather than to a fixed 650x585.
+        // Hard-coded, it simply overflowed once the window was narrower than
+        // itself: labels lost their first characters off the left edge and the
+        // fields ran off the right.
+        //
+        // x and y are explicit because a size without a position leaves the
+        // corner up to Slint, and the centring has to hold at every width.
         Rectangle {
-            width: 650px;
-            // Grew with the MIDI row: each settings row costs ~85px once the
-            // HorizontalBox padding is counted, and the buttons spilled out
-            // below the box at 360px.
-            height: 585px;
+            width: min(650px, parent.width - 32px);
+            height: min(520px, parent.height - 32px);
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+
             background: #2b2b2b;
             border-radius: 8px;
             border-width: 1px;
@@ -309,8 +341,8 @@ export component MainWindow inherits Window {
             drop-shadow-offset-y: 5px;
 
             VerticalBox {
-                padding: 30px;
-                spacing: 20px;
+                padding: 24px;
+                spacing: 16px;
 
                 Text {
                     text: "Configuration Settings";
@@ -320,31 +352,53 @@ export component MainWindow inherits Window {
                     horizontal-alignment: center;
                 }
 
-                // No `alignment: center` on these rows: it sizes each row to its
-                // own content, so a row with a wider field starts further left.
-                // Filling the width instead makes the 220px label column a real
-                // column, shared by every row.
-                HorizontalBox {
+                // HorizontalLayout, not HorizontalBox: the latter adds theme
+                // padding on top of this spacing, which is what made each row
+                // cost ~85px and forced the box to 585px tall. Same reasoning
+                // as the status row above.
+                //
+                // No `alignment: center` on these rows either: it sizes each
+                // row to its own content, so a row with a wider field starts
+                // further left. Filling the width instead makes the 220px label
+                // column a real column, shared by every row.
+                //
+                // What actually caused the clipping: a `width:` on the panel
+                // above does not override the minimum width its content
+                // reports, and the widest row's minimum was ~542px — 24px
+                // padding + 220px label + 20px spacing + a ComboBox that sizes
+                // itself to its longest device name (~278px for "Casque
+                // (Realtek(R) Audio)"). So the panel could not shrink to fit a
+                // narrow window: it stayed wider, and being centred put its
+                // left edge at a negative x, which is why the labels lost their
+                // first characters off the left.
+                //
+                // The label column is 170px rather than 220px, measured: the
+                // longest label draws 151px wide, so the rest was waste. That
+                // buys 50px back, and the window's min-width covers what is
+                // left. Trying to cap the dropdown's own minimum was a dead end
+                // — min-width raises a floor, it cannot lower a natural
+                // minimum, and a clipping wrapper around it changed nothing.
+                HorizontalLayout {
                     spacing: 20px;
-                    Text { text: "Phone Name (KDE Connect):"; color: #d4d4d4; vertical-alignment: center; min-width: 220px; }
+                    Text { text: "Phone Name (KDE Connect):"; color: #d4d4d4; vertical-alignment: center; min-width: 170px; }
                     phone_input := LineEdit { text: root.phone-name; horizontal-stretch: 1; }
                 }
 
-                HorizontalBox {
+                HorizontalLayout {
                     spacing: 20px;
-                    Text { text: "Hotspot Name (SSID):"; color: #d4d4d4; vertical-alignment: center; min-width: 220px; }
+                    Text { text: "Hotspot Name (SSID):"; color: #d4d4d4; vertical-alignment: center; min-width: 170px; }
                     hotspot_input := LineEdit { text: root.hotspot-name; horizontal-stretch: 1; }
                 }
 
-                HorizontalBox {
+                HorizontalLayout {
                     spacing: 20px;
-                    Text { text: "OSC File Path:"; color: #d4d4d4; vertical-alignment: center; min-width: 220px; }
+                    Text { text: "OSC File Path:"; color: #d4d4d4; vertical-alignment: center; min-width: 170px; }
                     osc_input := LineEdit { text: root.osc-path; horizontal-stretch: 1; }
                 }
 
-                HorizontalBox {
+                HorizontalLayout {
                     spacing: 20px;
-                    Text { text: "MIDI Device:"; color: #d4d4d4; vertical-alignment: center; min-width: 220px; }
+                    Text { text: "MIDI Device:"; color: #d4d4d4; vertical-alignment: center; min-width: 170px; }
                     ComboBox {
                         model: root.midi-devices;
                         current-value: root.midi-device;
@@ -353,9 +407,9 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                HorizontalBox {
+                HorizontalLayout {
                     spacing: 20px;
-                    Text { text: "Audio Output:"; color: #d4d4d4; vertical-alignment: center; min-width: 220px; }
+                    Text { text: "Audio Output:"; color: #d4d4d4; vertical-alignment: center; min-width: 170px; }
                     ComboBox {
                         model: root.audio-devices;
                         current-value: root.audio-device;
