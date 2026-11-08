@@ -125,7 +125,7 @@ fn load_the_most_recent_file(enigo: &mut Enigo) {
 }
 
 fn launch_programs(settings: &Settings) {
-    let gig_performer_path = r"C:\Program Files\Plugin Alliance\Gig Performer 4\GigPerformer4.exe";
+    let gig_performer_path = r"C:\Program Files\Deskew Technologies\Gig Performer 5\GigPerformer5.exe";
     let osc_path = r"D:\Apps\portable\open-stage-control_1.30.1_win32-x64\open-stage-control.exe";
 
     console_log!("Launching Gig Performer...");

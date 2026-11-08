@@ -121,7 +121,7 @@ def launch_programs(phone_name):
     # 1. Software Paths
     # ---------------------------------------------------------
     gig_performer_path = (
-        r"C:\Program Files\Plugin Alliance\Gig Performer 4\GigPerformer4.exe"
+        r"C:\Program Files\Deskew Technologies\Gig Performer 5\GigPerformer5.exe"
     )
     osc_path = (
         r"D:\Apps\portable\open-stage-control_1.30.1_win32-x64\open-stage-control.exe"
