@@ -22,8 +22,10 @@ mod switch_defender;
 mod switch_sleep;
 mod utils;
 
+use settings::DefenderImages;
 use slint::{Timer, TimerMode};
 use std::cell::RefCell;
+use std::path::Path;
 use std::rc::Rc;
 use std::thread;
 use std::time::Duration;
@@ -106,6 +108,7 @@ fn main() -> Result<(), slint::PlatformError> {
     app.set_osc_path(settings.osc_file_path.clone().into());
     app.set_shutdown_after_clear(settings.shutdown_after_clear);
     app.set_manage_defender(settings.manage_defender);
+    seed_defender_images(&app, &settings.defender_images);
     app.set_console_text("System initialized. Awaiting command...\n".into());
 
     // Shared with every UI callback below. Slint runs them all on this
@@ -221,6 +224,13 @@ fn main() -> Result<(), slint::PlatformError> {
             .upgrade()
             .map(|app| app.get_audio_device().to_string())
             .unwrap_or_default();
+        // Read off the properties, like the dropdowns above, because the
+        // Browse and Default buttons write them too — the three text fields are
+        // the only ones the callback can carry as arguments.
+        let chosen_images = app_weak_save
+            .upgrade()
+            .map(read_defender_images)
+            .unwrap_or_default();
 
         let new_settings = settings::merge_from_form(
             stored,
@@ -229,15 +239,18 @@ fn main() -> Result<(), slint::PlatformError> {
             &osc_path,
             &chosen_device,
             &chosen_audio,
+            chosen_images,
         );
 
         settings::save_settings(&new_settings);
         console_log!("\nSettings successfully updated and saved to settings.json.");
+        report_defender_images(&new_settings.defender_images);
 
         if let Some(app) = app_weak_save.upgrade() {
             app.set_phone_name(new_settings.phone_name.into());
             app.set_hotspot_name(new_settings.hotspot_name.into());
             app.set_osc_path(new_settings.osc_file_path.into());
+            seed_defender_images(&app, &new_settings.defender_images);
 
             // Follow the devices that were just saved. Without this the meter
             // and the listener stay on whatever they opened last, so a new
@@ -262,6 +275,56 @@ fn main() -> Result<(), slint::PlatformError> {
         if let Some(app) = app_weak_settings.upgrade() {
             refresh_midi_devices(&app, &midi_for_settings, &released_for_settings, false);
             refresh_audio_devices(&app, &audio_for_settings, false);
+            // Put the image fields back to what is on disk. They are two-way
+            // bound, so Browse, Default and typing all land on the property
+            // straight away — without this, CANCEL would leave an edit on
+            // screen that was never saved.
+            seed_defender_images(&app, &settings::load_settings().defender_images);
+        }
+    });
+
+    // Pick a replacement screen-match image. Runs on the UI thread, where the
+    // dialog is modal to the app, and the properties it writes are the same
+    // ones the save handler reads back.
+    let app_weak_browse = app.as_weak();
+    app.on_browse_defender_image(move |slot| {
+        let Some(app) = app_weak_browse.upgrade() else {
+            return;
+        };
+
+        let current = defender_image_for(&app, &slot);
+        let mut dialog = rfd::FileDialog::new()
+            .set_title("Choose a Defender screen-match image")
+            .add_filter("Images", &["png", "bmp", "jpg", "jpeg"]);
+
+        // Open where the last choice came from, so replacing one of a set of
+        // screenshots does not mean navigating back there every time.
+        if let Some(parent) = Path::new(&current).parent().filter(|p| p.is_dir()) {
+            dialog = dialog.set_directory(parent);
+        }
+
+        // Cancelling has to leave the field exactly as it was, so only a Some
+        // writes anything.
+        let Some(picked) = dialog.pick_file() else {
+            return;
+        };
+        let picked = picked.to_string_lossy().to_string();
+
+        match slot.as_str() {
+            "activate" => app.set_defender_activate_image(picked.clone().into()),
+            "protection" => app.set_defender_protection_image(picked.clone().into()),
+            "realtime" => app.set_defender_realtime_image(picked.clone().into()),
+            "settings" => app.set_defender_settings_image(picked.clone().into()),
+            other => {
+                console_log!("Ignoring an unknown Defender image slot: {other}");
+                return;
+            }
+        }
+
+        console_log!("\n{slot} image set to {picked}");
+        match assets::inspect_custom_image(&picked) {
+            Ok((width, height)) => console_log!("It reads as {width}x{height}."),
+            Err(e) => console_log!("Warning: it will not load ({e}). Save anyway to keep it."),
         }
     });
 
@@ -390,6 +453,69 @@ Windows Defender step: {}",
     }
 
     slint::run_event_loop()
+}
+
+/// Push the stored image paths into the Advanced fields.
+///
+/// Called at startup, after a save, and whenever the modal opens — the last of
+/// those is what makes CANCEL discard an edit, since these fields are two-way
+/// bound and so are written the moment they are touched.
+fn seed_defender_images(app: &MainWindow, images: &DefenderImages) {
+    app.set_defender_activate_image(images.activate.clone().into());
+    app.set_defender_protection_image(images.protection.clone().into());
+    app.set_defender_realtime_image(images.realtime.clone().into());
+    app.set_defender_settings_image(images.settings.clone().into());
+}
+
+/// Read the Advanced fields back out, for the save.
+fn read_defender_images(app: MainWindow) -> DefenderImages {
+    DefenderImages {
+        activate: app.get_defender_activate_image().to_string(),
+        protection: app.get_defender_protection_image().to_string(),
+        realtime: app.get_defender_realtime_image().to_string(),
+        settings: app.get_defender_settings_image().to_string(),
+    }
+}
+
+/// The path currently in one Advanced field, named by the slot the UI passes.
+fn defender_image_for(app: &MainWindow, slot: &str) -> String {
+    match slot {
+        "activate" => app.get_defender_activate_image().to_string(),
+        "protection" => app.get_defender_protection_image().to_string(),
+        "realtime" => app.get_defender_realtime_image().to_string(),
+        "settings" => app.get_defender_settings_image().to_string(),
+        _ => String::new(),
+    }
+}
+
+/// Say in the console what each chosen image looks like, or why it will not
+/// load.
+///
+/// The save is not blocked on this — the OSC path is not checked at save time
+/// either — but a template that cannot be read clicks nothing, and finding that
+/// out at the gig is the failure the embedded images were introduced to stop.
+fn report_defender_images(images: &DefenderImages) {
+    let chosen = [
+        ("Activate", &images.activate),
+        ("Protection", &images.protection),
+        ("Realtime", &images.realtime),
+        ("Settings", &images.settings),
+    ];
+
+    for (label, path) in chosen {
+        if path.is_empty() {
+            continue;
+        }
+        match assets::inspect_custom_image(path) {
+            Ok((width, height)) => {
+                console_log!("{label} image: {path} ({width}x{height})");
+            }
+            Err(e) => {
+                console_log!("{label} image: {path} will not load ({e}).");
+                console_log!("The built-in image will be used for that step.");
+            }
+        }
+    }
 }
 
 /// Re-read the connected devices and (re)open the one to listen on.

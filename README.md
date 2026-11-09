@@ -136,7 +136,27 @@ edits made in the app's settings dialog take effect immediately:
 | `hotspot_name` | SSID the PC switches to before launching anything |
 | `osc_file_path` | Open Stage Control preset to load |
 | `midi_device` | MIDI input to watch; falls back to the first connected device when absent |
+| `audio_device` | Audio output to watch for the signal LED; same fallback as `midi_device` |
 | `shutdown_after_clear` | Power the PC off 2s after CLEAR DECK finishes (default off) |
+| `manage_defender` | Whether LAUNCH and CLEAR DECK toggle Defender at all (default on) |
+| `defender_images` | Replacements for the four Defender screen-match images — see below |
+
+`defender_images` holds one path per Defender step — `activate`, `protection`,
+`realtime` and `settings` — set from **Advanced** in the settings dialog. An
+empty entry, which is the default, means the image compiled into the exe from
+`assets/`, so clearing a field is how you get the original back. A path that
+cannot be read or decoded falls back to the built-in image and says so in the
+console, rather than leaving the automation clicking nothing.
+
+Only the Rust build acts on `defender_images`. The Python build shows the
+Advanced fields but its Browse buttons do nothing, and it neither reads the
+paths nor applies them to its own Defender step. It does keep them: it loads
+`settings.json` whole and writes it back whole, so saving from the Python build
+leaves the block intact rather than clearing it.
+
+One caveat for `realtime`: that step clicks a fixed offset below wherever the
+image matched rather than the image itself, so a replacement has to be cropped
+the same way as the original for the offset to still land on the toggle.
 
 A packaged build keeps its own copy next to the `.exe`. The Python builds ship
 the repository's `settings.json` inside the bundle and seed that copy from it —

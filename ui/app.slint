@@ -14,6 +14,9 @@ component DarkButton inherits Rectangle {
     // Added customizable background colors to replace hardcoded raw Rectangles
     in-out property <color> btn-color: #555555;
     in-out property <color> btn-color-disabled: #333333;
+    // The 20px default is sized for the big LAUNCH/CLEAR buttons. The compact
+    // buttons on the Advanced rows are ~28px tall, where it does not fit.
+    in-out property <length> btn-font-size: 20px;
     callback clicked();
 
     background: root.btn-enabled ? root.btn-color : root.btn-color-disabled;
@@ -22,7 +25,7 @@ component DarkButton inherits Rectangle {
     Text {
         text: root.btn-text;
         color: root.btn-enabled ? white : #888888;
-        font-size: 20px;
+        font-size: root.btn-font-size;
         horizontal-alignment: center;
         vertical-alignment: center;
     }
@@ -30,6 +33,111 @@ component DarkButton inherits Rectangle {
     TouchArea {
         enabled: root.btn-enabled;
         clicked => { root.clicked(); }
+    }
+}
+
+// ==========================================
+// FOLDABLE SECTION HEADER
+// ==========================================
+// A chevron and a title that fold the group below them. The chevron is drawn
+// rather than loaded for the same reason DefenderButton's shield is: assets/
+// holds screen-match templates, not icons, and a vector needs no bundling.
+component FoldHeader inherits Rectangle {
+    in property <string> title;
+    in-out property <bool> expanded: false;
+
+    height: 30px;
+    border-radius: 4px;
+    background: touch.has-hover ? #333333 : transparent;
+
+    animate background { duration: 120ms; }
+
+    HorizontalLayout {
+        padding-left: 6px;
+        spacing: 8px;
+        alignment: start;
+
+        Path {
+            width: 12px;
+            height: 12px;
+            y: (parent.height - self.height) / 2;
+            viewbox-width: 12;
+            viewbox-height: 12;
+            // Points down when open, right when closed. Swapping the commands
+            // keeps this off any rotation support for a Path.
+            commands: root.expanded ? "M 2 4 L 6 9 L 10 4 Z" : "M 4 2 L 9 6 L 4 10 Z";
+            fill: #d4d4d4;
+        }
+
+        Text {
+            text: root.title;
+            color: #d4d4d4;
+            font-size: 14px;
+            font-weight: 700;
+            vertical-alignment: center;
+        }
+    }
+
+    touch := TouchArea {
+        clicked => { root.expanded = !root.expanded; }
+    }
+}
+
+// ==========================================
+// DEFENDER IMAGE ROW (ADVANCED)
+// ==========================================
+// One Defender screen-match image: where it is, a picker, and the way back to
+// the original.
+//
+// Empty text means the image compiled into the exe, which is why Default is a
+// single assignment with no backend round trip — it works the same in both
+// builds, even though only the Rust one answers `browse`.
+//
+// Label and field keep the 170px/20px column the rows above use; the buttons
+// sit in their own 8px group so the row's natural minimum stays narrow enough
+// for the 620px window floor.
+component DefenderImageRow inherits HorizontalLayout {
+    in property <string> label;
+    in-out property <string> path;
+    callback browse();
+
+    spacing: 20px;
+
+    Text {
+        text: root.label;
+        color: #d4d4d4;
+        vertical-alignment: center;
+        min-width: 170px;
+    }
+
+    HorizontalLayout {
+        horizontal-stretch: 1;
+        spacing: 8px;
+
+        LineEdit {
+            text <=> root.path;
+            placeholder-text: "Built-in image";
+            horizontal-stretch: 1;
+            min-width: 100px;
+        }
+
+        DarkButton {
+            btn-text: "…";
+            btn-font-size: 16px;
+            width: 32px;
+            height: 28px;
+            y: (parent.height - self.height) / 2;
+            clicked => { root.browse(); }
+        }
+
+        DarkButton {
+            btn-text: "Default";
+            btn-font-size: 13px;
+            width: 72px;
+            height: 28px;
+            y: (parent.height - self.height) / 2;
+            clicked => { root.path = ""; }
+        }
     }
 }
 
@@ -144,6 +252,24 @@ export component MainWindow inherits Window {
     in-out property <string> hotspot-name: "";
     in-out property <string> osc-path: "";
 
+    // --- Advanced: Defender screen-match images ---
+    //
+    // Collapsed by default, so the modal opens looking as it always did.
+    //
+    // These four are two-way bound to their fields rather than read at save
+    // time like phone/hotspot/OSC above, because three things write them: the
+    // field itself, the Browse button (from the backend) and the Default
+    // button. Empty means "use the image compiled into the exe", which is what
+    // makes Default a one-liner that needs no backend at all.
+    //
+    // The flip side of a two-way binding is that CANCEL no longer discards an
+    // edit for free, so the backend re-seeds these when the modal opens.
+    in-out property <bool> advanced-expanded: false;
+    in-out property <string> defender-activate-image: "";
+    in-out property <string> defender-protection-image: "";
+    in-out property <string> defender-realtime-image: "";
+    in-out property <string> defender-settings-image: "";
+
     // --- Callbacks ---
     callback launch-clicked();
     callback clear-clicked();
@@ -151,6 +277,12 @@ export component MainWindow inherits Window {
     callback shutdown-toggled(bool);
     callback defender-toggled(bool);
     callback settings-opened();
+    // Takes the slot name — "activate", "protection", "realtime" or "settings"
+    // — and the backend writes the chosen path back into the matching property
+    // above. One argument rather than four callbacks, and nothing to return:
+    // cancelling has to leave the field alone, which a returned empty string
+    // could not express.
+    callback browse-defender-image(string);
 
     // ==========================================
     // MAIN UI LAYER
@@ -326,7 +458,15 @@ export component MainWindow inherits Window {
         // corner up to Slint, and the centring has to hold at every width.
         Rectangle {
             width: min(650px, parent.width - 32px);
-            height: min(520px, parent.height - 32px);
+            // Collapsed, this is the 520px the modal has always been. Expanded,
+            // it takes what the window can spare instead: at 520px the four
+            // image rows sat behind a scrollbar while a third of the window's
+            // height went unused below the panel. 800px is measured — the
+            // expanded content comes to ~740px — and it stays a cap rather than
+            // a plain height, so a tall window does not stretch the panel past
+            // its own content. The ScrollView still catches a window too short
+            // for even this.
+            height: min(root.advanced-expanded ? 800px : 520px, parent.height - 32px);
             x: (parent.width - self.width) / 2;
             y: (parent.height - self.height) / 2;
 
@@ -378,43 +518,129 @@ export component MainWindow inherits Window {
                 // left. Trying to cap the dropdown's own minimum was a dead end
                 // — min-width raises a floor, it cannot lower a natural
                 // minimum, and a clipping wrapper around it changed nothing.
-                HorizontalLayout {
-                    spacing: 20px;
-                    Text { text: "Phone Name (KDE Connect):"; color: #d4d4d4; vertical-alignment: center; min-width: 170px; }
-                    phone_input := LineEdit { text: root.phone-name; horizontal-stretch: 1; }
-                }
+                // The rows scroll; the panel does not grow. Expanding Advanced
+                // adds four rows more than the 520px cap above can show, and
+                // raising that cap would put the panel back outside a narrowed
+                // window — the very bug the sizing notes above describe. Title
+                // and buttons stay outside this, so SAVE is always reachable
+                // however far the list runs.
+                ScrollView {
+                    vertical-stretch: 1;
 
-                HorizontalLayout {
-                    spacing: 20px;
-                    Text { text: "Hotspot Name (SSID):"; color: #d4d4d4; vertical-alignment: center; min-width: 170px; }
-                    hotspot_input := LineEdit { text: root.hotspot-name; horizontal-stretch: 1; }
-                }
+                    VerticalLayout {
+                        // Bound to the viewport rather than left to the
+                        // content: inside a ScrollView an unconstrained layout
+                        // reports its own natural width, and the rows stop
+                        // filling the panel.
+                        //
+                        // Minus a gutter, because `visible-width` does not
+                        // subtract the scrollbar: without it the bar is drawn
+                        // straight over the fields as soon as the list
+                        // overflows. Measured off a screenshot of that — the
+                        // idle bar came out as a 2px line six pixels inside the
+                        // field border, so it was painting on the input itself,
+                        // which is the hairline that appeared along the rows
+                        // with Advanced open and not with it closed. 16px
+                        // rather than the ~8px the idle bar needs, because this
+                        // style fattens the thumb on hover.
+                        //
+                        // Reserved in both states on purpose: a gutter that
+                        // came and went would shift every row's right edge as
+                        // the section folds, trading one inconsistency for
+                        // another.
+                        width: parent.visible-width - 16px;
+                        spacing: 16px;
+                        alignment: start;
 
-                HorizontalLayout {
-                    spacing: 20px;
-                    Text { text: "OSC File Path:"; color: #d4d4d4; vertical-alignment: center; min-width: 170px; }
-                    osc_input := LineEdit { text: root.osc-path; horizontal-stretch: 1; }
-                }
+                        HorizontalLayout {
+                            spacing: 20px;
+                            Text { text: "Phone Name (KDE Connect):"; color: #d4d4d4; vertical-alignment: center; min-width: 170px; }
+                            phone_input := LineEdit { text: root.phone-name; horizontal-stretch: 1; }
+                        }
 
-                HorizontalLayout {
-                    spacing: 20px;
-                    Text { text: "MIDI Device:"; color: #d4d4d4; vertical-alignment: center; min-width: 170px; }
-                    ComboBox {
-                        model: root.midi-devices;
-                        current-value: root.midi-device;
-                        horizontal-stretch: 1;
-                        selected(value) => { root.midi-device = value; }
-                    }
-                }
+                        HorizontalLayout {
+                            spacing: 20px;
+                            Text { text: "Hotspot Name (SSID):"; color: #d4d4d4; vertical-alignment: center; min-width: 170px; }
+                            hotspot_input := LineEdit { text: root.hotspot-name; horizontal-stretch: 1; }
+                        }
 
-                HorizontalLayout {
-                    spacing: 20px;
-                    Text { text: "Audio Output:"; color: #d4d4d4; vertical-alignment: center; min-width: 170px; }
-                    ComboBox {
-                        model: root.audio-devices;
-                        current-value: root.audio-device;
-                        horizontal-stretch: 1;
-                        selected(value) => { root.audio-device = value; }
+                        HorizontalLayout {
+                            spacing: 20px;
+                            Text { text: "OSC File Path:"; color: #d4d4d4; vertical-alignment: center; min-width: 170px; }
+                            osc_input := LineEdit { text: root.osc-path; horizontal-stretch: 1; }
+                        }
+
+                        HorizontalLayout {
+                            spacing: 20px;
+                            Text { text: "MIDI Device:"; color: #d4d4d4; vertical-alignment: center; min-width: 170px; }
+                            ComboBox {
+                                model: root.midi-devices;
+                                current-value: root.midi-device;
+                                horizontal-stretch: 1;
+                                selected(value) => { root.midi-device = value; }
+                            }
+                        }
+
+                        HorizontalLayout {
+                            spacing: 20px;
+                            Text { text: "Audio Output:"; color: #d4d4d4; vertical-alignment: center; min-width: 170px; }
+                            ComboBox {
+                                model: root.audio-devices;
+                                current-value: root.audio-device;
+                                horizontal-stretch: 1;
+                                selected(value) => { root.audio-device = value; }
+                            }
+                        }
+
+                        FoldHeader {
+                            title: "Advanced";
+                            expanded <=> root.advanced-expanded;
+                        }
+
+                        // `if`, not `visible`: an un-instantiated subtree costs
+                        // the layout nothing, so a collapsed Advanced leaves the
+                        // modal exactly as it was before this existed.
+                        if (root.advanced-expanded) : VerticalLayout {
+                            spacing: 16px;
+
+                            Text {
+                                text: "Images the Defender steps look for on screen. Leave a field empty, or press Default, to use the one built into the app.";
+                                color: #9a9a9a;
+                                font-size: 12px;
+                                wrap: word-wrap;
+                            }
+
+                            DefenderImageRow {
+                                label: "Activate image:";
+                                path <=> root.defender-activate-image;
+                                browse => { root.browse-defender-image("activate"); }
+                            }
+
+                            DefenderImageRow {
+                                label: "Protection image:";
+                                path <=> root.defender-protection-image;
+                                browse => { root.browse-defender-image("protection"); }
+                            }
+
+                            DefenderImageRow {
+                                label: "Realtime image:";
+                                path <=> root.defender-realtime-image;
+                                browse => { root.browse-defender-image("realtime"); }
+                            }
+
+                            DefenderImageRow {
+                                label: "Settings image:";
+                                path <=> root.defender-settings-image;
+                                browse => { root.browse-defender-image("settings"); }
+                            }
+
+                            Text {
+                                text: "Realtime is the exception: that step clicks a fixed offset below where the image matches, not the image itself, so crop a replacement the same way as the original.";
+                                color: #9a9a9a;
+                                font-size: 12px;
+                                wrap: word-wrap;
+                            }
+                        }
                     }
                 }
 
