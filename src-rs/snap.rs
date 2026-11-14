@@ -15,9 +15,8 @@ pub fn snap_gig_windows(option: &str) {
     // Give apps time to register their windows with the OS
     thread::sleep(Duration::from_secs(2));
 
-    let (screen_width, screen_height) = unsafe {
-        (GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN))
-    };
+    let (screen_width, screen_height) =
+        unsafe { (GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN)) };
     let half_width = screen_width / 2;
 
     // Snap Open Stage Control to the left half

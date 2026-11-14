@@ -30,6 +30,11 @@ image = "0.25.10"
 rustfft = "6"
 # MIDI input for the activity LED — the Rust counterpart of python-rtmidi.
 midir = "0.10"
+# Native file picker, for choosing a replacement Defender screen-match image.
+# Default features off: they pull async-std and the Linux GTK/portal backends,
+# none of which this Windows-only build compiles anything for. The Win32
+# IFileOpenDialog backend comes from the target, not from a feature.
+rfd = { version = "0.18.0", default-features = false }
 
 [dependencies.windows]
 version = "0.58"

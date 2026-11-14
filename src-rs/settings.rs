@@ -2,6 +2,77 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+/// Replacements for the screen-match images the Defender automation clicks.
+///
+/// The built-in ones are screenshots of one particular Defender UI, so a
+/// different Windows build, language or display scaling needs different ones.
+/// An empty entry means "use the image compiled into the exe" — which is both
+/// the default and the reset, so clearing a field in the Advanced section
+/// restores the original with nothing to undo.
+///
+/// Note that empty means something different here than it does for the device
+/// fields in [`Settings`]; [`merge_from_form`] says why.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DefenderImages {
+    // These two are named for the state the image *shows*, not the step it is
+    // used in. That is the opposite way round, and it is the part that reads
+    // oddly until you see why: the card is matched *before* the click, so
+    // turning protection back on has to look for the card as it appears while
+    // protection is off.
+    /// The "Virus & threat protection" card as it looks while real-time
+    /// protection is off. Matched on the way back on, during CLEAR DECK.
+    #[serde(default)]
+    pub deactivation_state: String,
+    /// The same card as it looks while real-time protection is on. Matched on
+    /// the way off, during LAUNCH.
+    #[serde(default)]
+    pub activation_state: String,
+    /// The "Real-time protection" label the last click is offset from.
+    #[serde(default)]
+    pub realtime_label: String,
+    /// The "Manage settings" link.
+    #[serde(default)]
+    pub manage_settings: String,
+}
+
+impl DefenderImages {
+    /// Trim every path, the way the text fields are trimmed on save.
+    fn trimmed(self) -> Self {
+        Self {
+            deactivation_state: self.deactivation_state.trim().to_string(),
+            activation_state: self.activation_state.trim().to_string(),
+            realtime_label: self.realtime_label.trim().to_string(),
+            manage_settings: self.manage_settings.trim().to_string(),
+        }
+    }
+}
+
+/// Where the programs LAUNCH starts actually live.
+///
+/// An empty entry means the default install path compiled into the exe, the
+/// same rule the image fields follow, so clearing a field is the way back to
+/// the original. Worth having because the Open Stage Control default carries a
+/// version number in its folder name, which made upgrading it a source edit.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Executables {
+    /// Gig Performer. Empty uses the default install path.
+    #[serde(default)]
+    pub gig_performer: String,
+    /// Open Stage Control. Empty uses the default install path.
+    #[serde(default)]
+    pub open_stage_control: String,
+}
+
+impl Executables {
+    /// Trim both paths, the way the text fields are trimmed on save.
+    fn trimmed(self) -> Self {
+        Self {
+            gig_performer: self.gig_performer.trim().to_string(),
+            open_stage_control: self.open_stage_control.trim().to_string(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Settings {
     pub phone_name: String,
@@ -21,6 +92,16 @@ pub struct Settings {
     /// existed, keeps behaving as it always did.
     #[serde(default = "enabled")]
     pub manage_defender: bool,
+    /// Chosen replacements for the Defender screen-match images. All empty by
+    /// default, so a settings.json written before this existed reads as the
+    /// built-in images.
+    #[serde(default)]
+    pub defender_images: DefenderImages,
+    /// Chosen locations for the programs LAUNCH starts. Both empty by default,
+    /// so a settings.json written before this existed reads as the built-in
+    /// install paths.
+    #[serde(default)]
+    pub executables: Executables,
 }
 
 /// serde needs a function for a non-false default.
@@ -38,6 +119,8 @@ impl Default for Settings {
             audio_device: String::new(),
             shutdown_after_clear: false,
             manage_defender: true,
+            defender_images: DefenderImages::default(),
+            executables: Executables::default(),
         }
     }
 }
@@ -55,7 +138,6 @@ fn config_dir() -> PathBuf {
     }
     std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
 }
-
 
 /// Get the full path to settings.json.
 pub fn config_path() -> PathBuf {
@@ -100,38 +182,55 @@ pub fn save_settings(settings: &Settings) {
 /// and the two dropdowns.
 ///
 /// Lives here rather than inside the save callback so the rules are testable
-/// without driving the UI. Two of them matter:
+/// without driving the UI. Three of them matter:
 ///
 /// - The shutdown and Defender toggles live on the main screen, not this form,
 ///   so they are carried over from disk untouched.
 /// - A dropdown reads empty when its device is not connected. Taking that at
 ///   face value would wipe the remembered device, so an empty one keeps
 ///   whatever was stored.
-pub fn merge_from_form(
-    stored: Settings,
-    phone: &str,
-    hotspot: &str,
-    osc_path: &str,
-    midi_device: &str,
-    audio_device: &str,
-) -> Settings {
+/// - The Advanced paths — the Defender images and the two executables — follow
+///   the opposite rule to the dropdowns: an empty one means "use the built-in
+///   default", not "keep what was stored". Carrying the stored path over
+///   instead would make the Default button impossible, since clearing a field
+///   would just restore the old path on save.
+pub fn merge_from_form(stored: Settings, form: FormInput) -> Settings {
     Settings {
-        phone_name: phone.trim().to_string(),
-        hotspot_name: hotspot.trim().to_string(),
-        osc_file_path: osc_path.trim().to_string(),
-        midi_device: if midi_device.is_empty() {
+        phone_name: form.phone.trim().to_string(),
+        hotspot_name: form.hotspot.trim().to_string(),
+        osc_file_path: form.osc_path.trim().to_string(),
+        midi_device: if form.midi_device.is_empty() {
             stored.midi_device
         } else {
-            midi_device.to_string()
+            form.midi_device.to_string()
         },
-        audio_device: if audio_device.is_empty() {
+        audio_device: if form.audio_device.is_empty() {
             stored.audio_device
         } else {
-            audio_device.to_string()
+            form.audio_device.to_string()
         },
         shutdown_after_clear: stored.shutdown_after_clear,
         manage_defender: stored.manage_defender,
+        defender_images: form.defender_images.trimmed(),
+        executables: form.executables.trimmed(),
     }
+}
+
+/// Everything the settings modal holds when SAVE is pressed.
+///
+/// A struct rather than a widening parameter list: the Advanced groups had
+/// taken [`merge_from_form`] to eight positional arguments, four of them
+/// same-typed strings sitting next to each other, where transposing two would
+/// have compiled and quietly saved the hotspot name as the phone name. Naming
+/// them also keeps the next group of options from growing the signature again.
+pub struct FormInput<'a> {
+    pub phone: &'a str,
+    pub hotspot: &'a str,
+    pub osc_path: &'a str,
+    pub midi_device: &'a str,
+    pub audio_device: &'a str,
+    pub defender_images: DefenderImages,
+    pub executables: Executables,
 }
 
 #[cfg(test)]
@@ -147,6 +246,29 @@ mod tests {
             audio_device: "Speakers 01 (ASIOVADPRO Driver)".into(),
             shutdown_after_clear: true,
             manage_defender: false,
+            defender_images: DefenderImages {
+                deactivation_state: "D:/shots/deactivation_state.png".into(),
+                ..Default::default()
+            },
+            executables: Executables {
+                gig_performer: "D:/apps/GigPerformer5.exe".into(),
+                ..Default::default()
+            },
+        }
+    }
+
+    /// A filled-in form with nothing chosen in Advanced. Each test overrides
+    /// only the field it is about, so what it is testing is the only thing that
+    /// differs from a plain save.
+    fn form() -> FormInput<'static> {
+        FormInput {
+            phone: "Phone",
+            hotspot: "Hotspot",
+            osc_path: "p.json",
+            midi_device: "x",
+            audio_device: "y",
+            defender_images: DefenderImages::default(),
+            executables: Executables::default(),
         }
     }
 
@@ -154,11 +276,11 @@ mod tests {
     fn the_chosen_audio_output_is_saved() {
         let saved = merge_from_form(
             stored(),
-            "Phone",
-            "Hotspot",
-            "p.json",
-            "Portable G-1 0",
-            "Haut-parleur (Realtek(R) Audio)",
+            FormInput {
+                midi_device: "Portable G-1 0",
+                audio_device: "Haut-parleur (Realtek(R) Audio)",
+                ..form()
+            },
         );
         assert_eq!(saved.audio_device, "Haut-parleur (Realtek(R) Audio)");
     }
@@ -166,23 +288,162 @@ mod tests {
     #[test]
     fn an_empty_dropdown_keeps_the_stored_device() {
         // Nothing connected, so both dropdowns read empty.
-        let saved = merge_from_form(stored(), "Phone", "Hotspot", "p.json", "", "");
+        let saved = merge_from_form(
+            stored(),
+            FormInput {
+                midi_device: "",
+                audio_device: "",
+                ..form()
+            },
+        );
         assert_eq!(saved.audio_device, "Speakers 01 (ASIOVADPRO Driver)");
         assert_eq!(saved.midi_device, "Portable G-1 0");
     }
 
     #[test]
     fn the_main_screen_toggles_survive_a_save() {
-        let saved = merge_from_form(stored(), "Phone", "Hotspot", "p.json", "x", "y");
+        let saved = merge_from_form(stored(), form());
         assert!(saved.shutdown_after_clear);
         assert!(!saved.manage_defender);
     }
 
     #[test]
     fn form_fields_are_trimmed() {
-        let saved = merge_from_form(stored(), "  Phone  ", " Hotspot ", " p.json ", "x", "y");
+        let saved = merge_from_form(
+            stored(),
+            FormInput {
+                phone: "  Phone  ",
+                hotspot: " Hotspot ",
+                osc_path: " p.json ",
+                ..form()
+            },
+        );
         assert_eq!(saved.phone_name, "Phone");
         assert_eq!(saved.hotspot_name, "Hotspot");
         assert_eq!(saved.osc_file_path, "p.json");
+    }
+
+    #[test]
+    fn a_chosen_defender_image_is_saved() {
+        let saved = merge_from_form(
+            stored(),
+            FormInput {
+                defender_images: DefenderImages {
+                    deactivation_state: "D:/shots/new_deactivation_state.png".into(),
+                    realtime_label: "D:/shots/new_realtime_label.png".into(),
+                    ..Default::default()
+                },
+                ..form()
+            },
+        );
+        assert_eq!(
+            saved.defender_images.deactivation_state,
+            "D:/shots/new_deactivation_state.png"
+        );
+        assert_eq!(
+            saved.defender_images.realtime_label,
+            "D:/shots/new_realtime_label.png"
+        );
+    }
+
+    /// Guards the Default button. Unlike the device dropdowns, an empty image
+    /// field must not fall back to what was stored, or clearing a field would
+    /// silently restore the path it was meant to remove.
+    #[test]
+    fn clearing_a_defender_image_restores_the_built_in_one() {
+        let saved = merge_from_form(stored(), form());
+        assert_eq!(
+            saved.defender_images,
+            DefenderImages::default(),
+            "an empty image field fell back to the stored path, so Default cannot work"
+        );
+    }
+
+    #[test]
+    fn defender_image_paths_are_trimmed() {
+        let saved = merge_from_form(
+            stored(),
+            FormInput {
+                defender_images: DefenderImages {
+                    manage_settings: "  D:/shots/manage_settings.png  ".into(),
+                    ..Default::default()
+                },
+                ..form()
+            },
+        );
+        assert_eq!(
+            saved.defender_images.manage_settings,
+            "D:/shots/manage_settings.png"
+        );
+    }
+
+    #[test]
+    fn a_chosen_executable_is_saved() {
+        let saved = merge_from_form(
+            stored(),
+            FormInput {
+                executables: Executables {
+                    gig_performer: "D:/rigs/GigPerformer5.exe".into(),
+                    open_stage_control: "D:/rigs/open-stage-control.exe".into(),
+                },
+                ..form()
+            },
+        );
+        assert_eq!(saved.executables.gig_performer, "D:/rigs/GigPerformer5.exe");
+        assert_eq!(
+            saved.executables.open_stage_control,
+            "D:/rigs/open-stage-control.exe"
+        );
+    }
+
+    /// The same guard as the image fields: clearing an executable field has to
+    /// mean "go back to the install path", not "keep the one on disk".
+    #[test]
+    fn clearing_an_executable_restores_the_built_in_path() {
+        let saved = merge_from_form(stored(), form());
+        assert_eq!(
+            saved.executables,
+            Executables::default(),
+            "an empty executable field fell back to the stored path, so Default cannot work"
+        );
+    }
+
+    #[test]
+    fn executable_paths_are_trimmed() {
+        let saved = merge_from_form(
+            stored(),
+            FormInput {
+                executables: Executables {
+                    open_stage_control: "  D:/rigs/open-stage-control.exe  ".into(),
+                    ..Default::default()
+                },
+                ..form()
+            },
+        );
+        assert_eq!(
+            saved.executables.open_stage_control,
+            "D:/rigs/open-stage-control.exe"
+        );
+    }
+
+    /// A settings.json written before the Advanced section existed has neither
+    /// block, and must read as "use the built-in defaults" rather than failing
+    /// to parse and tripping the repair path.
+    #[test]
+    fn a_settings_file_without_the_image_block_reads_as_built_in() {
+        let json = r#"{
+            "phone_name": "MERBAC PRO",
+            "hotspot_name": "MERBAC PRO",
+            "osc_file_path": "D:/preset.json",
+            "shutdown_after_clear": false,
+            "midi_device": "Portable G-1 0",
+            "manage_defender": true
+        }"#;
+
+        let parsed: Settings =
+            serde_json::from_str(json).expect("an older settings.json must parse");
+        assert_eq!(parsed.defender_images, DefenderImages::default());
+        assert_eq!(parsed.executables, Executables::default());
+        assert_eq!(parsed.phone_name, "MERBAC PRO");
     }
 }

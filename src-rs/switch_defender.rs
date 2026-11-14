@@ -1,5 +1,6 @@
-use crate::assets;
+use crate::assets::{self, DefenderSlot};
 use crate::screen;
+use crate::settings;
 use enigo::{Button, Coordinate, Enigo, Key, Keyboard, Mouse, Settings as EnigoSettings};
 use std::os::windows::process::CommandExt;
 use std::process::Command;
@@ -47,19 +48,33 @@ pub fn switch_defender(option: &str) {
 
     thread::sleep(Duration::from_secs(7));
 
-    let icon_def_1 = if option == "on" {
-        &assets::DEFENDER_ACTIVATE
+    // Read fresh here rather than taken as an argument, the way every other
+    // action in this app re-reads settings.json: it keeps both call sites
+    // unchanged — gig_close::main only receives two bools — and means a
+    // replacement image chosen in the Advanced settings takes effect on the
+    // next toggle without a restart.
+    let images = settings::load_settings().defender_images;
+
+    let slot_1 = if option == "on" {
+        DefenderSlot::DeactivationState
     } else {
-        &assets::DEFENDER_PROTECTION
+        DefenderSlot::ActivationState
     };
 
-    screen::click_on_img(icon_def_1, &mut enigo);
-    screen::click_on_img(&assets::DEFENDER_SETTINGS, &mut enigo);
+    let icon_def_1 = assets::defender_template(slot_1, &images);
+    screen::click_on_img(&icon_def_1, &mut enigo);
+
+    let icon_def_2 = assets::defender_template(DefenderSlot::ManageSettings, &images);
+    screen::click_on_img(&icon_def_2, &mut enigo);
 
     // 0.9, not the 0.8 default — switch_defender.py asks for the stricter
     // confidence on this one because the click target is derived by offset.
-    let icon_def_3 = &assets::DEFENDER_REALTIME;
-    if let Some((img_x, img_y)) = screen::find_on_screen(icon_def_3, 0.8) {
+    //
+    // The click below is an offset from wherever this image matched, not on the
+    // image itself, so a replacement has to be cropped like the original one for
+    // the offsets to still land on the toggle.
+    let icon_def_3 = assets::defender_template(DefenderSlot::RealtimeLabel, &images);
+    if let Some((img_x, img_y)) = screen::find_on_screen(&icon_def_3, 0.8) {
         let target_x = img_x - 20;
         let target_y = if option == "on" {
             img_y + 160

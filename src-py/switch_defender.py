@@ -4,7 +4,7 @@ from utils import resource_path
 import time
 
 
-icon_def = resource_path("assets/defender_activate_icon.png")
+icon_def = resource_path("assets/defender_deactivation_state.png")
 
 
 def click_on_img(img):
@@ -35,14 +35,14 @@ def switch_defender(option):
     time.sleep(7)
 
     if option == "on":
-        icon_def_1 = resource_path("assets/defender_activate_icon.png")
+        icon_def_1 = resource_path("assets/defender_deactivation_state.png")
     if option == "off":
-        icon_def_1 = resource_path("./assets/defender_protection_icon.png")
-    icon_def_2 = resource_path("./assets/defender_settings_icon.png")
+        icon_def_1 = resource_path("./assets/defender_activation_state.png")
+    icon_def_2 = resource_path("./assets/defender_manage_settings.png")
     click_on_img(icon_def_1)
     click_on_img(icon_def_2)
 
-    icon_def_3 = resource_path("./assets/defender_realtime_icon.png")
+    icon_def_3 = resource_path("./assets/defender_realtime_label.png")
 
     image_pos = pyautogui.locateCenterOnScreen(icon_def_3, confidence=0.9)
 

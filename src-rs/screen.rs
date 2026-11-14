@@ -67,12 +67,24 @@ extern "system" {
     fn SelectObject(hdc: Hdc, h: Hgdiobj) -> Hgdiobj;
     fn DeleteObject(ho: Hgdiobj) -> i32;
     fn BitBlt(
-        hdc: Hdc, x: i32, y: i32, cx: i32, cy: i32,
-        hdc_src: Hdc, x1: i32, y1: i32, rop: u32,
+        hdc: Hdc,
+        x: i32,
+        y: i32,
+        cx: i32,
+        cy: i32,
+        hdc_src: Hdc,
+        x1: i32,
+        y1: i32,
+        rop: u32,
     ) -> i32;
     fn GetDIBits(
-        hdc: Hdc, hbm: Hbitmap, start: u32, clines: u32,
-        lpv_bits: *mut c_void, lpbmi: *mut BitmapInfo, usage: u32,
+        hdc: Hdc,
+        hbm: Hbitmap,
+        start: u32,
+        clines: u32,
+        lpv_bits: *mut c_void,
+        lpbmi: *mut BitmapInfo,
+        usage: u32,
     ) -> i32;
 }
 
@@ -113,9 +125,11 @@ fn capture_screen() -> Option<GrayImage> {
             return None;
         }
 
-        // PIL/PyAutoGUI uses CreateDC("DISPLAY") — not GetDC(NULL)
+        // PIL/PyAutoGUI uses CreateDC("DISPLAY") — not GetDC(NULL).
+        // The cast is because this extern is declared with `*const u8` rather
+        // than `*const c_char`; the bytes are the same either way.
         let screen_dc = CreateDCA(
-            b"DISPLAY\0".as_ptr(),
+            c"DISPLAY".as_ptr().cast(),
             std::ptr::null(),
             std::ptr::null(),
             std::ptr::null(),
@@ -235,8 +249,7 @@ pub fn find_on_screen(template: &Template, confidence: f32) -> Option<(i32, i32)
     );
 
     // Validate template fits within the screen
-    if template_img.width() > screen_gray.width() || template_img.height() > screen_gray.height()
-    {
+    if template_img.width() > screen_gray.width() || template_img.height() > screen_gray.height() {
         console_log!(
             "Error: template image ({}x{}) is larger than the screen capture ({}x{}). \
              Possible DPI scaling mismatch.",

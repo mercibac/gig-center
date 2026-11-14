@@ -2,6 +2,7 @@ use crate::settings::Settings;
 use arboard::Clipboard;
 use enigo::{Button, Coordinate, Enigo, Key, Keyboard, Mouse, Settings as EnigoSettings};
 use std::os::windows::process::CommandExt;
+use std::path::Path;
 use std::process::Command;
 use std::thread;
 use std::time::Duration;
@@ -124,16 +125,55 @@ fn load_the_most_recent_file(enigo: &mut Enigo) {
     let _ = enigo.button(Button::Left, enigo::Direction::Click);
 }
 
-fn launch_programs(settings: &Settings) {
-    let gig_performer_path = r"C:\Program Files\Deskew Technologies\Gig Performer 5\GigPerformer5.exe";
-    let osc_path = r"D:\Apps\portable\open-stage-control_1.30.1_win32-x64\open-stage-control.exe";
+/// Where Gig Performer puts itself.
+const GIG_PERFORMER_DEFAULT: &str =
+    r"C:\Program Files\Deskew Technologies\Gig Performer 5\GigPerformer5.exe";
 
-    console_log!("Launching Gig Performer...");
+/// Where Open Stage Control lives on this rig. The folder name carries the
+/// version, so this one goes stale on every upgrade — which is the reason the
+/// Advanced section can override it.
+const OPEN_STAGE_CONTROL_DEFAULT: &str =
+    r"D:\Apps\portable\open-stage-control_1.30.1_win32-x64\open-stage-control.exe";
+
+/// The executable to start: the one chosen in the Advanced settings, or the
+/// default above when that field is empty or names something that is not there.
+///
+/// Falling back rather than failing keeps LAUNCH behaving exactly as it did
+/// before the field existed, so a path left over from an uninstalled version
+/// costs a console line instead of the gig rig.
+fn executable<'a>(chosen: &'a str, default: &'a str, name: &str) -> &'a str {
+    let chosen = chosen.trim();
+    if chosen.is_empty() {
+        return default;
+    }
+    if Path::new(chosen).is_file() {
+        return chosen;
+    }
+    console_log!("The {name} path set in Settings is not there: {chosen}");
+    console_log!("Falling back to {default}");
+    default
+}
+
+fn launch_programs(settings: &Settings) {
+    let gig_performer_path = executable(
+        &settings.executables.gig_performer,
+        GIG_PERFORMER_DEFAULT,
+        "Gig Performer",
+    );
+    let osc_path = executable(
+        &settings.executables.open_stage_control,
+        OPEN_STAGE_CONTROL_DEFAULT,
+        "Open Stage Control",
+    );
+
+    // The path is logged because it is now a setting: when the wrong build
+    // starts, the console says which one was asked for.
+    console_log!("Launching Gig Performer... ({gig_performer_path})");
     let _ = Command::new("cmd")
         .args(["/C", "start", "", gig_performer_path])
         .spawn();
 
-    console_log!("Launching Open Stage Control...");
+    console_log!("Launching Open Stage Control... ({osc_path})");
     let _ = Command::new("cmd")
         .args(["/C", "start", "", osc_path])
         .spawn();
@@ -225,4 +265,75 @@ pub fn main(settings: Settings) {
             console_log!("\nPlease check your phone hotspot and try again.");
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::path::PathBuf;
+
+    /// A scratch path of its own per test. There is no `tempfile`
+    /// dev-dependency and these tests do not need one.
+    fn scratch(tag: &str) -> PathBuf {
+        let unique = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        std::env::temp_dir().join(format!("gig-center-{tag}-{unique}.exe"))
+    }
+
+    #[test]
+    fn an_empty_field_uses_the_install_path() {
+        assert_eq!(
+            executable("", GIG_PERFORMER_DEFAULT, "Gig Performer"),
+            GIG_PERFORMER_DEFAULT
+        );
+    }
+
+    /// Whitespace is not a choice, so a field left holding a stray space still
+    /// resolves to the install path rather than trying to run " ".
+    #[test]
+    fn a_blank_field_uses_the_install_path() {
+        assert_eq!(
+            executable("   ", OPEN_STAGE_CONTROL_DEFAULT, "Open Stage Control"),
+            OPEN_STAGE_CONTROL_DEFAULT
+        );
+    }
+
+    #[test]
+    fn a_chosen_executable_that_is_there_is_used() {
+        let path = scratch("chosen");
+        fs::write(&path, b"not really an exe").expect("could not write the test file");
+        let chosen = path.to_string_lossy().to_string();
+
+        assert_eq!(
+            executable(&chosen, GIG_PERFORMER_DEFAULT, "Gig Performer"),
+            chosen
+        );
+        let _ = fs::remove_file(&path);
+    }
+
+    /// The case this guards: Open Stage Control is upgraded, the old versioned
+    /// folder goes, and the saved path now points at nothing. LAUNCH has to
+    /// carry on with the built-in path rather than start nothing at all.
+    #[test]
+    fn a_chosen_executable_that_is_gone_falls_back() {
+        let missing = scratch("missing").to_string_lossy().to_string();
+        assert_eq!(
+            executable(&missing, OPEN_STAGE_CONTROL_DEFAULT, "Open Stage Control"),
+            OPEN_STAGE_CONTROL_DEFAULT
+        );
+    }
+
+    /// A directory is not something `start` can run, so it counts as missing.
+    #[test]
+    fn a_folder_is_not_an_executable() {
+        let dir = std::env::temp_dir();
+        let chosen = dir.to_string_lossy().to_string();
+        assert_eq!(
+            executable(&chosen, GIG_PERFORMER_DEFAULT, "Gig Performer"),
+            GIG_PERFORMER_DEFAULT
+        );
+    }
 }

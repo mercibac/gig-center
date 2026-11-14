@@ -19,7 +19,7 @@ pub fn force_kill(target_processes: &[&str]) {
     let mut sys = System::new_all();
     sys.refresh_processes();
 
-    for (_pid, process) in sys.processes() {
+    for process in sys.processes().values() {
         let process_name = process.name().to_lowercase();
         if target_processes
             .iter()

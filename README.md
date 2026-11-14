@@ -92,6 +92,28 @@ Tests for the Rust screen matcher:
 cargo test
 ```
 
+## CI
+
+`.github/workflows/ci.yml` runs on every pull request and every push to `main`,
+on Windows runners, since there is no other kind of build here. Three jobs:
+
+| Job | What it runs |
+| --- | --- |
+| Rust | `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test` |
+| Release build | `cargo build --release` |
+| Python | `ruff check --select E9,F`, `uv run --with pytest pytest src-py/tests` |
+
+Clippy is a hard gate, so the tree is kept at zero warnings. Ruff is limited to
+the rules that catch mistakes rather than style, and pinned, so the gate does
+not move on its own.
+
+The Python job is the one that covers what the two implementations share:
+`src-py/tests/test_shared_assets.py` checks that `ui/app.slint` still loads for
+the Python build, that every asset the automation reaches for by path is there,
+and that both packaging commands in `cmds.md` bundle the same, existing files —
+the failure cmds.md warns about, where a missing entry only shows up when the
+packaged exe is launched.
+
 The Python entry point resolves `ui/`, `assets/` and `settings.json` relative to
 its own location, so it runs from any working directory. The Rust build reads
 `settings.json` from the working directory only when the exe sits directly in
@@ -136,7 +158,54 @@ edits made in the app's settings dialog take effect immediately:
 | `hotspot_name` | SSID the PC switches to before launching anything |
 | `osc_file_path` | Open Stage Control preset to load |
 | `midi_device` | MIDI input to watch; falls back to the first connected device when absent |
+| `audio_device` | Audio output to watch for the signal LED; same fallback as `midi_device` |
 | `shutdown_after_clear` | Power the PC off 2s after CLEAR DECK finishes (default off) |
+| `manage_defender` | Whether LAUNCH and CLEAR DECK toggle Defender at all (default on) |
+| `defender_images` | Replacements for the four Defender screen-match images — see below |
+| `executables` | Where Gig Performer and Open Stage Control live — see below |
+
+`defender_images` holds one path per Defender step, set from **Advanced** in the
+settings dialog. An empty entry, which is the default, means the image compiled
+into the exe from `assets/`, so clearing a field is how you get the original
+back. A path that cannot be read or decoded falls back to the built-in image and
+says so in the console, rather than leaving the automation clicking nothing.
+
+| Key | What the image shows | Bundled file |
+| --- | --- | --- |
+| `deactivation_state` | The protection card while real-time protection is **off** | `defender_deactivation_state.png` |
+| `activation_state` | The same card while it is **on** | `defender_activation_state.png` |
+| `realtime_label` | The "Real-time protection" label | `defender_realtime_label.png` |
+| `manage_settings` | The "Manage settings" link | `defender_manage_settings.png` |
+
+The first two are named for the state the image *shows*, not the step it is used
+in, because the card is matched before the click: switching protection back on
+has to find the card as it looks while protection is off. The files carry no
+`_icon` suffix, unlike the rest of `assets/` — these are screenshots the matcher
+searches the screen for, not icons anything draws.
+
+Only the Rust build acts on `defender_images`. The Python build shows the
+Advanced fields but its Browse buttons do nothing, and it neither reads the
+paths nor applies them to its own Defender step. It does keep them: it loads
+`settings.json` whole and writes it back whole, so saving from the Python build
+leaves the block intact rather than clearing it.
+
+One caveat for `realtime_label`: that step clicks a fixed offset below wherever
+the image matched rather than the image itself, so a replacement has to be
+cropped the same way as the original for the offset to still land on the toggle.
+
+`executables` holds the two programs LAUNCH starts — `gig_performer` and
+`open_stage_control` — set from the same **Advanced** section. Empty means the
+install path compiled into the exe, so clearing a field restores it:
+
+| Program | Built-in path |
+| --- | --- |
+| `gig_performer` | `C:\Program Files\Deskew Technologies\Gig Performer 5\GigPerformer5.exe` |
+| `open_stage_control` | `D:\Apps\portable\open-stage-control_1.30.1_win32-x64\open-stage-control.exe` |
+
+The Open Stage Control default carries its version in the folder name, so it
+goes stale on every upgrade — that is mainly what this is for. A path that is
+no longer there falls back to the built-in one and says so in the console,
+rather than starting nothing; LAUNCH also logs which executable it used.
 
 A packaged build keeps its own copy next to the `.exe`. The Python builds ship
 the repository's `settings.json` inside the bundle and seed that copy from it —

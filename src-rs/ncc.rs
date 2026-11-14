@@ -11,7 +11,7 @@
 //! The first Rust port called `imageproc::match_template`, whose `score_at`
 //! re-reads the entire template — plus the window's sum of squares — at *every*
 //! output position. That is `O(screen_area × template_area)`. For a 1536×864
-//! screen and the 245×237 `defender_activate_icon.png` that is
+//! screen and the 245×237 `defender_deactivation_state.png` that is
 //! 1292 × 628 = 811 376 positions × 58 065 template pixels × 2 accumulators
 //! ≈ **94 billion** floating-point operations for a single lookup, and
 //! `switch_defender` performs three lookups per call. That, not any of the
@@ -96,8 +96,8 @@ pub fn match_ccoeff_normed(image: &GrayImage, template: &GrayImage) -> Option<Ma
         for x in 0..out_w {
             // Summed-area lookup. Grouped as (A + D) − (B + C) because every
             // term is a u64 and the regrouped form can never go negative.
-            let win_sum =
-                ((sum[bottom + x + tw] + sum[top + x]) - (sum[bottom + x] + sum[top + x + tw])) as f64;
+            let win_sum = ((sum[bottom + x + tw] + sum[top + x])
+                - (sum[bottom + x] + sum[top + x + tw])) as f64;
             let win_sq = ((sq_sum[bottom + x + tw] + sq_sum[top + x])
                 - (sq_sum[bottom + x] + sq_sum[top + x + tw])) as f64;
 
@@ -205,15 +205,39 @@ fn cross_correlate(image: &GrayImage, template: &GrayImage) -> Vec<f64> {
             .max(col_inv.get_inplace_scratch_len())
     ];
 
-    fft_2d(&mut a, fw, fh, &row_fwd, &col_fwd, &mut transposed, &mut scratch);
-    fft_2d(&mut b, fw, fh, &row_fwd, &col_fwd, &mut transposed, &mut scratch);
+    fft_2d(
+        &mut a,
+        fw,
+        fh,
+        &row_fwd,
+        &col_fwd,
+        &mut transposed,
+        &mut scratch,
+    );
+    fft_2d(
+        &mut b,
+        fw,
+        fh,
+        &row_fwd,
+        &col_fwd,
+        &mut transposed,
+        &mut scratch,
+    );
 
     // Correlation (rather than convolution) is the conjugate product.
     for (av, bv) in a.iter_mut().zip(b.iter()) {
         *av *= bv.conj();
     }
 
-    fft_2d(&mut a, fw, fh, &row_inv, &col_inv, &mut transposed, &mut scratch);
+    fft_2d(
+        &mut a,
+        fw,
+        fh,
+        &row_inv,
+        &col_inv,
+        &mut transposed,
+        &mut scratch,
+    );
 
     // rustfft's inverse is unnormalized.
     let scale = 1.0 / (fw * fh) as f64;
@@ -312,7 +336,9 @@ mod tests {
     fn noise_image(w: u32, h: u32, seed: u64) -> GrayImage {
         let mut state = seed;
         GrayImage::from_fn(w, h, |_, _| {
-            state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            state = state
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
             Luma([(state >> 33) as u8])
         })
     }
@@ -387,9 +413,12 @@ mod tests {
             let stride = image.width() as usize + 1;
             let (tw, th) = (template.width() as usize, template.height() as usize);
             let n = (tw * th) as f64;
-            let t_mean =
-                template.as_raw().iter().map(|&p| p as f64).sum::<f64>() / n;
-            let t_sq: f64 = template.as_raw().iter().map(|&p| (p as f64) * (p as f64)).sum();
+            let t_mean = template.as_raw().iter().map(|&p| p as f64).sum::<f64>() / n;
+            let t_sq: f64 = template
+                .as_raw()
+                .iter()
+                .map(|&p| (p as f64) * (p as f64))
+                .sum();
             let t_var = t_sq - n * t_mean * t_mean;
 
             let (xs, ys) = (x as usize, y as usize);
@@ -428,9 +457,12 @@ mod tests {
     /// screen dimensions; `imageproc` needed ~94 billion ops for this.
     #[test]
     fn full_screen_search_is_fast() {
-        let template = crate::assets::DEFENDER_ACTIVATE
-            .to_luma8()
-            .expect("embedded asset should decode");
+        let template = crate::assets::defender_template(
+            crate::assets::DefenderSlot::DeactivationState,
+            &Default::default(),
+        )
+        .to_luma8()
+        .expect("embedded asset should decode");
         let mut screen = noise_image(1536, 864, 2024);
 
         let (px, py) = (900u32, 400u32);
@@ -472,9 +504,12 @@ mod tests {
     fn compare_against_brute_force() {
         use imageproc::template_matching::{match_template, MatchTemplateMethod};
 
-        let template = crate::assets::DEFENDER_ACTIVATE
-            .to_luma8()
-            .expect("embedded asset should decode");
+        let template = crate::assets::defender_template(
+            crate::assets::DefenderSlot::DeactivationState,
+            &Default::default(),
+        )
+        .to_luma8()
+        .expect("embedded asset should decode");
         let mut screen = noise_image(1536, 864, 2024);
         let (px, py) = (900u32, 400u32);
         for y in 0..template.height() {

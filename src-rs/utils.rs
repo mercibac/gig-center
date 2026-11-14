@@ -38,8 +38,7 @@ unsafe fn set_volume_inner(percentage: u32) -> windows::core::Result<()> {
     // Initialize COM — ignore S_FALSE (already initialized)
     let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
 
-    let enumerator: IMMDeviceEnumerator =
-        CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)?;
+    let enumerator: IMMDeviceEnumerator = CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)?;
 
     let device = enumerator.GetDefaultAudioEndpoint(eRender, eConsole)?;
 
