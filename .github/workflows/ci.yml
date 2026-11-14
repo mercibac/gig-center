@@ -25,11 +25,12 @@ jobs:
   rust:
     name: Rust
     runs-on: windows-latest
-    # A cold run measured 59m11s, clearing the previous 60 with 49 seconds to
-    # spare — any variance in runner speed would have turned it red again.
-    # Warm runs are minutes; this is headroom for the cold case, not a target.
-    # cache-on-failure below means a run that does hit this still leaves a
-    # cache behind, so the next one gets further rather than repeating it.
+    # Measured on this workflow: 59m11s from cold, 43m27s with a warm cache.
+    # The cache saves about a quarter of the time, not most of it, so this job
+    # is expensive however it runs and 90 is roughly double the warm case
+    # rather than slack for a rare cold one. cache-on-failure below means a run
+    # that does hit the limit still leaves a cache behind, so the next one gets
+    # further rather than repeating it.
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
