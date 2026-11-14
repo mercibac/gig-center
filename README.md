@@ -99,10 +99,12 @@ does it now.
 
 Both jobs carry a generous `timeout-minutes`, because a cold cache is expensive
 here: clippy and the test build each compile the dependency graph in full, and
-`[profile.dev.package."*"]` puts every one of those at `opt-level = 3`.
-`cache-on-failure` is on for the same reason. rust-cache saves on success only
-by default, so a job that times out writes no cache and the next run starts just
-as cold, which is a hole it cannot climb out of on its own.
+`[profile.dev.package."*"]` puts every one of those at `opt-level = 3`. A cold
+Rust job has been measured at 59m11s, against minutes once a cache exists —
+that gap is what the 90 is headroom for, not a target. `cache-on-failure` is on
+for the same reason: rust-cache saves on success only by default, so a job that
+times out writes no cache and the next run starts just as cold, which is a hole
+it cannot climb out of on its own.
 
 The exe reads `settings.json` from the working directory only when it sits
 directly in `target/debug` or `target/release`, which is what `cargo run` gives

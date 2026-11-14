@@ -25,7 +25,12 @@ jobs:
   rust:
     name: Rust
     runs-on: windows-latest
-    timeout-minutes: 60
+    # A cold run measured 59m11s, clearing the previous 60 with 49 seconds to
+    # spare — any variance in runner speed would have turned it red again.
+    # Warm runs are minutes; this is headroom for the cold case, not a target.
+    # cache-on-failure below means a run that does hit this still leaves a
+    # cache behind, so the next one gets further rather than repeating it.
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
 
