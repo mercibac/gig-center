@@ -84,20 +84,21 @@ component FoldHeader inherits Rectangle {
 }
 
 // ==========================================
-// DEFENDER IMAGE ROW (ADVANCED)
+// ADVANCED PATH ROW
 // ==========================================
-// One Defender screen-match image: where it is, a picker, and the way back to
-// the original.
+// One overridable path — a Defender screen-match image, or one of the programs
+// LAUNCH starts: where it is, a picker, and the way back to the original.
 //
-// Empty text means the image compiled into the exe, which is why Default is a
-// single assignment with no backend round trip — it works the same in both
-// builds, even though only the Rust one answers `browse`.
+// Empty text means the built-in default, which is why Default is a single
+// assignment with no backend round trip — it works the same in both builds,
+// even though only the Rust one answers `browse`.
 //
 // Label and field keep the 170px/20px column the rows above use; the buttons
 // sit in their own 8px group so the row's natural minimum stays narrow enough
 // for the 620px window floor.
-component DefenderImageRow inherits HorizontalLayout {
+component PathRow inherits HorizontalLayout {
     in property <string> label;
+    in property <string> placeholder: "Built-in default";
     in-out property <string> path;
     callback browse();
 
@@ -116,7 +117,7 @@ component DefenderImageRow inherits HorizontalLayout {
 
         LineEdit {
             text <=> root.path;
-            placeholder-text: "Built-in image";
+            placeholder-text: root.placeholder;
             horizontal-stretch: 1;
             min-width: 100px;
         }
@@ -270,6 +271,13 @@ export component MainWindow inherits Window {
     in-out property <string> defender-realtime-image: "";
     in-out property <string> defender-settings-image: "";
 
+    // --- Advanced: where the programs LAUNCH starts live ---
+    // Same empty-means-default rule as the images above. The Open Stage
+    // Control default has its version in the folder name, so it goes stale
+    // every upgrade — that is what these are mainly for.
+    in-out property <string> executable-gig-performer: "";
+    in-out property <string> executable-open-stage-control: "";
+
     // --- Callbacks ---
     callback launch-clicked();
     callback clear-clicked();
@@ -277,12 +285,13 @@ export component MainWindow inherits Window {
     callback shutdown-toggled(bool);
     callback defender-toggled(bool);
     callback settings-opened();
-    // Takes the slot name — "activate", "protection", "realtime" or "settings"
-    // — and the backend writes the chosen path back into the matching property
-    // above. One argument rather than four callbacks, and nothing to return:
-    // cancelling has to leave the field alone, which a returned empty string
-    // could not express.
-    callback browse-defender-image(string);
+    // Takes the slot name — "activate", "protection", "realtime", "settings",
+    // "gig-performer" or "open-stage-control" — and the backend writes the
+    // chosen path back into the matching property above, picking the file
+    // filter from the slot. One argument rather than six callbacks, and
+    // nothing to return: cancelling has to leave the field alone, which a
+    // returned empty string could not express.
+    callback browse-for-path(string);
 
     // ==========================================
     // MAIN UI LAYER
@@ -459,14 +468,16 @@ export component MainWindow inherits Window {
         Rectangle {
             width: min(650px, parent.width - 32px);
             // Collapsed, this is the 520px the modal has always been. Expanded,
-            // it takes what the window can spare instead: at 520px the four
-            // image rows sat behind a scrollbar while a third of the window's
-            // height went unused below the panel. 800px is measured — the
-            // expanded content comes to ~740px — and it stays a cap rather than
-            // a plain height, so a tall window does not stretch the panel past
-            // its own content. The ScrollView still catches a window too short
-            // for even this.
-            height: min(root.advanced-expanded ? 800px : 520px, parent.height - 32px);
+            // it takes what the window can spare instead: at 520px the image
+            // rows sat behind a scrollbar while a third of the window's height
+            // went unused below the panel.
+            //
+            // 920px is measured against the content — ~740px of rows and notes
+            // plus ~165px of title, padding and the button row — and it stays a
+            // cap rather than a plain height, so a tall window does not stretch
+            // the panel past its own content. A window shorter than that still
+            // scrolls, which is what the ScrollView and its gutter are for.
+            height: min(root.advanced-expanded ? 920px : 520px, parent.height - 32px);
             x: (parent.width - self.width) / 2;
             y: (parent.height - self.height) / 2;
 
@@ -604,38 +615,77 @@ export component MainWindow inherits Window {
                             spacing: 16px;
 
                             Text {
-                                text: "Images the Defender steps look for on screen. Leave a field empty, or press Default, to use the one built into the app.";
+                                text: "Leave a field empty, or press Default, to use what is built into the app.";
                                 color: #9a9a9a;
                                 font-size: 12px;
                                 wrap: word-wrap;
                             }
 
-                            DefenderImageRow {
+                            Text {
+                                text: "Defender images";
+                                color: #d4d4d4;
+                                font-size: 13px;
+                                font-weight: 700;
+                            }
+
+                            PathRow {
                                 label: "Activate image:";
+                                placeholder: "Built-in image";
                                 path <=> root.defender-activate-image;
-                                browse => { root.browse-defender-image("activate"); }
+                                browse => { root.browse-for-path("activate"); }
                             }
 
-                            DefenderImageRow {
+                            PathRow {
                                 label: "Protection image:";
+                                placeholder: "Built-in image";
                                 path <=> root.defender-protection-image;
-                                browse => { root.browse-defender-image("protection"); }
+                                browse => { root.browse-for-path("protection"); }
                             }
 
-                            DefenderImageRow {
+                            PathRow {
                                 label: "Realtime image:";
+                                placeholder: "Built-in image";
                                 path <=> root.defender-realtime-image;
-                                browse => { root.browse-defender-image("realtime"); }
+                                browse => { root.browse-for-path("realtime"); }
                             }
 
-                            DefenderImageRow {
+                            PathRow {
                                 label: "Settings image:";
+                                placeholder: "Built-in image";
                                 path <=> root.defender-settings-image;
-                                browse => { root.browse-defender-image("settings"); }
+                                browse => { root.browse-for-path("settings"); }
                             }
 
                             Text {
-                                text: "Realtime is the exception: that step clicks a fixed offset below where the image matches, not the image itself, so crop a replacement the same way as the original.";
+                                text: "Realtime clicks a fixed offset below where its image matches, not the image itself, so crop a replacement like the original.";
+                                color: #9a9a9a;
+                                font-size: 12px;
+                                wrap: word-wrap;
+                            }
+
+                            Text {
+                                text: "Programs";
+                                color: #d4d4d4;
+                                font-size: 13px;
+                                font-weight: 700;
+                            }
+
+                            PathRow {
+                                label: "Gig Performer:";
+                                placeholder: "Default install path";
+                                path <=> root.executable-gig-performer;
+                                browse => { root.browse-for-path("gig-performer"); }
+                            }
+
+                            PathRow {
+                                label: "Open Stage Control:";
+                                placeholder: "Default install path";
+                                path <=> root.executable-open-stage-control;
+                                browse => { root.browse-for-path("open-stage-control"); }
+                            }
+
+                            Text {
+                                text: "A path that is no longer there falls back to the built-in one and says so in the console.";
                                 color: #9a9a9a;
                                 font-size: 12px;
                                 wrap: word-wrap;

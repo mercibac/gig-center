@@ -140,6 +140,7 @@ edits made in the app's settings dialog take effect immediately:
 | `shutdown_after_clear` | Power the PC off 2s after CLEAR DECK finishes (default off) |
 | `manage_defender` | Whether LAUNCH and CLEAR DECK toggle Defender at all (default on) |
 | `defender_images` | Replacements for the four Defender screen-match images — see below |
+| `executables` | Where Gig Performer and Open Stage Control live — see below |
 
 `defender_images` holds one path per Defender step — `activate`, `protection`,
 `realtime` and `settings` — set from **Advanced** in the settings dialog. An
@@ -157,6 +158,20 @@ leaves the block intact rather than clearing it.
 One caveat for `realtime`: that step clicks a fixed offset below wherever the
 image matched rather than the image itself, so a replacement has to be cropped
 the same way as the original for the offset to still land on the toggle.
+
+`executables` holds the two programs LAUNCH starts — `gig_performer` and
+`open_stage_control` — set from the same **Advanced** section. Empty means the
+install path compiled into the exe, so clearing a field restores it:
+
+| Program | Built-in path |
+| --- | --- |
+| `gig_performer` | `C:\Program Files\Deskew Technologies\Gig Performer 5\GigPerformer5.exe` |
+| `open_stage_control` | `D:\Apps\portable\open-stage-control_1.30.1_win32-x64\open-stage-control.exe` |
+
+The Open Stage Control default carries its version in the folder name, so it
+goes stale on every upgrade — that is mainly what this is for. A path that is
+no longer there falls back to the built-in one and says so in the console,
+rather than starting nothing; LAUNCH also logs which executable it used.
 
 A packaged build keeps its own copy next to the `.exe`. The Python builds ship
 the repository's `settings.json` inside the bundle and seed that copy from it —
