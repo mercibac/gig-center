@@ -90,12 +90,19 @@ pinned to 1.97.1 so a gate never moves on its own. A floating `stable` turned
 main red on this workflow's first run, over a lint that did not exist when the
 code was written. Bump the pin deliberately, as its own commit.
 
-The release build is kept out of the quick job because `lto = "fat"` makes it
-much the slowest thing here. It is also what covers the parts of the tree no unit
-test reaches: `build.rs` compiles `ui/app.slint`, and the `include_bytes!` calls
-in `assets.rs` and `splash_art.rs` fail the build if a template is renamed or
+The release build is kept out of the quick job so a full optimised link does not
+hold it up. It is also what covers the parts of the tree no unit test reaches:
+`build.rs` compiles `ui/app.slint`, and the `include_bytes!` calls in
+`assets.rs` and `splash_art.rs` fail the build if a template is renamed or
 missing. Those two used to be checked by a test on the Python side; the build
 does it now.
+
+Both jobs carry a generous `timeout-minutes`, because a cold cache is expensive
+here: clippy and the test build each compile the dependency graph in full, and
+`[profile.dev.package."*"]` puts every one of those at `opt-level = 3`.
+`cache-on-failure` is on for the same reason. rust-cache saves on success only
+by default, so a job that times out writes no cache and the next run starts just
+as cold, which is a hole it cannot climb out of on its own.
 
 The exe reads `settings.json` from the working directory only when it sits
 directly in `target/debug` or `target/release`, which is what `cargo run` gives

@@ -25,7 +25,7 @@ jobs:
   rust:
     name: Rust
     runs-on: windows-latest
-    timeout-minutes: 25
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
@@ -40,6 +40,12 @@ jobs:
           components: rustfmt, clippy
 
       - uses: Swatinem/rust-cache@v2
+        with:
+          # Save even when the job fails. rust-cache saves on success only by
+          # default, so a run that times out leaves nothing behind and the next
+          # one starts just as cold -- which is how this job stayed red: it
+          # never got far enough to write the cache that would let it finish.
+          cache-on-failure: true
 
       - name: Format
         run: cargo fmt --check
@@ -74,10 +80,11 @@ jobs:
           # The release profile shares no artifacts with the debug one the job
           # above caches, so it gets its own entry instead of thrashing that.
           key: release
+          cache-on-failure: true
 
-      # Kept out of the Rust job because lto = "fat" makes this much the
-      # slowest thing here and it should not hold up the quick feedback. Worth
-      # running at all because a wrong include_bytes! path, a missing asset or
-      # a broken ui/app.slint are only resolved by a real build.
+      # Kept out of the Rust job so a full optimised link does not hold up the
+      # quick gates. Worth running at all because a wrong include_bytes! path,
+      # a missing asset or a broken ui/app.slint are only resolved by a real
+      # build.
       - name: Build
         run: cargo build --release
