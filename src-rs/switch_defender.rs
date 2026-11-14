@@ -56,15 +56,15 @@ pub fn switch_defender(option: &str) {
     let images = settings::load_settings().defender_images;
 
     let slot_1 = if option == "on" {
-        DefenderSlot::Activate
+        DefenderSlot::DeactivationState
     } else {
-        DefenderSlot::Protection
+        DefenderSlot::ActivationState
     };
 
     let icon_def_1 = assets::defender_template(slot_1, &images);
     screen::click_on_img(&icon_def_1, &mut enigo);
 
-    let icon_def_2 = assets::defender_template(DefenderSlot::Settings, &images);
+    let icon_def_2 = assets::defender_template(DefenderSlot::ManageSettings, &images);
     screen::click_on_img(&icon_def_2, &mut enigo);
 
     // 0.9, not the 0.8 default — switch_defender.py asks for the stricter
@@ -73,7 +73,7 @@ pub fn switch_defender(option: &str) {
     // The click below is an offset from wherever this image matched, not on the
     // image itself, so a replacement has to be cropped like the original one for
     // the offsets to still land on the toggle.
-    let icon_def_3 = assets::defender_template(DefenderSlot::Realtime, &images);
+    let icon_def_3 = assets::defender_template(DefenderSlot::RealtimeLabel, &images);
     if let Some((img_x, img_y)) = screen::find_on_screen(&icon_def_3, 0.8) {
         let target_x = img_x - 20;
         let target_y = if option == "on" {

@@ -335,10 +335,12 @@ fn main() -> Result<(), slint::PlatformError> {
         let picked = picked.to_string_lossy().to_string();
 
         match slot.as_str() {
-            "activate" => app.set_defender_activate_image(picked.clone().into()),
-            "protection" => app.set_defender_protection_image(picked.clone().into()),
-            "realtime" => app.set_defender_realtime_image(picked.clone().into()),
-            "settings" => app.set_defender_settings_image(picked.clone().into()),
+            "deactivation-state" => {
+                app.set_defender_deactivation_state_image(picked.clone().into())
+            }
+            "activation-state" => app.set_defender_activation_state_image(picked.clone().into()),
+            "realtime-label" => app.set_defender_realtime_label_image(picked.clone().into()),
+            "manage-settings" => app.set_defender_manage_settings_image(picked.clone().into()),
             "gig-performer" => app.set_executable_gig_performer(picked.clone().into()),
             "open-stage-control" => app.set_executable_open_stage_control(picked.clone().into()),
             other => {
@@ -495,19 +497,19 @@ Windows Defender step: {}",
 /// those is what makes CANCEL discard an edit, since these fields are two-way
 /// bound and so are written the moment they are touched.
 fn seed_defender_images(app: &MainWindow, images: &DefenderImages) {
-    app.set_defender_activate_image(images.activate.clone().into());
-    app.set_defender_protection_image(images.protection.clone().into());
-    app.set_defender_realtime_image(images.realtime.clone().into());
-    app.set_defender_settings_image(images.settings.clone().into());
+    app.set_defender_deactivation_state_image(images.deactivation_state.clone().into());
+    app.set_defender_activation_state_image(images.activation_state.clone().into());
+    app.set_defender_realtime_label_image(images.realtime_label.clone().into());
+    app.set_defender_manage_settings_image(images.manage_settings.clone().into());
 }
 
 /// Read the Advanced fields back out, for the save.
 fn read_defender_images(app: MainWindow) -> DefenderImages {
     DefenderImages {
-        activate: app.get_defender_activate_image().to_string(),
-        protection: app.get_defender_protection_image().to_string(),
-        realtime: app.get_defender_realtime_image().to_string(),
-        settings: app.get_defender_settings_image().to_string(),
+        deactivation_state: app.get_defender_deactivation_state_image().to_string(),
+        activation_state: app.get_defender_activation_state_image().to_string(),
+        realtime_label: app.get_defender_realtime_label_image().to_string(),
+        manage_settings: app.get_defender_manage_settings_image().to_string(),
     }
 }
 
@@ -529,10 +531,10 @@ fn read_executables(app: MainWindow) -> Executables {
 /// The path currently in one Advanced field, named by the slot the UI passes.
 fn path_for(app: &MainWindow, slot: &str) -> String {
     match slot {
-        "activate" => app.get_defender_activate_image().to_string(),
-        "protection" => app.get_defender_protection_image().to_string(),
-        "realtime" => app.get_defender_realtime_image().to_string(),
-        "settings" => app.get_defender_settings_image().to_string(),
+        "deactivation-state" => app.get_defender_deactivation_state_image().to_string(),
+        "activation-state" => app.get_defender_activation_state_image().to_string(),
+        "realtime-label" => app.get_defender_realtime_label_image().to_string(),
+        "manage-settings" => app.get_defender_manage_settings_image().to_string(),
         "gig-performer" => app.get_executable_gig_performer().to_string(),
         "open-stage-control" => app.get_executable_open_stage_control().to_string(),
         _ => String::new(),
@@ -571,10 +573,10 @@ fn report_executables(programs: &Executables) {
 /// out at the gig is the failure the embedded images were introduced to stop.
 fn report_defender_images(images: &DefenderImages) {
     let chosen = [
-        ("Activate", &images.activate),
-        ("Protection", &images.protection),
-        ("Realtime", &images.realtime),
-        ("Settings", &images.settings),
+        ("Deactivation state", &images.deactivation_state),
+        ("Activation state", &images.activation_state),
+        ("Realtime label", &images.realtime_label),
+        ("Manage settings", &images.manage_settings),
     ];
 
     for (label, path) in chosen {

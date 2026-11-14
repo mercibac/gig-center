@@ -142,12 +142,24 @@ edits made in the app's settings dialog take effect immediately:
 | `defender_images` | Replacements for the four Defender screen-match images — see below |
 | `executables` | Where Gig Performer and Open Stage Control live — see below |
 
-`defender_images` holds one path per Defender step — `activate`, `protection`,
-`realtime` and `settings` — set from **Advanced** in the settings dialog. An
-empty entry, which is the default, means the image compiled into the exe from
-`assets/`, so clearing a field is how you get the original back. A path that
-cannot be read or decoded falls back to the built-in image and says so in the
-console, rather than leaving the automation clicking nothing.
+`defender_images` holds one path per Defender step, set from **Advanced** in the
+settings dialog. An empty entry, which is the default, means the image compiled
+into the exe from `assets/`, so clearing a field is how you get the original
+back. A path that cannot be read or decoded falls back to the built-in image and
+says so in the console, rather than leaving the automation clicking nothing.
+
+| Key | What the image shows | Bundled file |
+| --- | --- | --- |
+| `deactivation_state` | The protection card while real-time protection is **off** | `defender_activate_icon.png` |
+| `activation_state` | The same card while it is **on** | `defender_protection_icon.png` |
+| `realtime_label` | The "Real-time protection" label | `defender_realtime_icon.png` |
+| `manage_settings` | The "Manage settings" link | `defender_settings_icon.png` |
+
+The first two are named for the state the image *shows*, not the step it is used
+in, because the card is matched before the click: switching protection back on
+has to find the card as it looks while protection is off. The bundled filenames
+still carry the older wording — they are shared with the Python build, so
+renaming them is a separate job.
 
 Only the Rust build acts on `defender_images`. The Python build shows the
 Advanced fields but its Browse buttons do nothing, and it neither reads the
@@ -155,9 +167,9 @@ paths nor applies them to its own Defender step. It does keep them: it loads
 `settings.json` whole and writes it back whole, so saving from the Python build
 leaves the block intact rather than clearing it.
 
-One caveat for `realtime`: that step clicks a fixed offset below wherever the
-image matched rather than the image itself, so a replacement has to be cropped
-the same way as the original for the offset to still land on the toggle.
+One caveat for `realtime_label`: that step clicks a fixed offset below wherever
+the image matched rather than the image itself, so a replacement has to be
+cropped the same way as the original for the offset to still land on the toggle.
 
 `executables` holds the two programs LAUNCH starts — `gig_performer` and
 `open_stage_control` — set from the same **Advanced** section. Empty means the

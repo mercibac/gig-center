@@ -266,10 +266,10 @@ export component MainWindow inherits Window {
     // The flip side of a two-way binding is that CANCEL no longer discards an
     // edit for free, so the backend re-seeds these when the modal opens.
     in-out property <bool> advanced-expanded: false;
-    in-out property <string> defender-activate-image: "";
-    in-out property <string> defender-protection-image: "";
-    in-out property <string> defender-realtime-image: "";
-    in-out property <string> defender-settings-image: "";
+    in-out property <string> defender-deactivation-state-image: "";
+    in-out property <string> defender-activation-state-image: "";
+    in-out property <string> defender-realtime-label-image: "";
+    in-out property <string> defender-manage-settings-image: "";
 
     // --- Advanced: where the programs LAUNCH starts live ---
     // Same empty-means-default rule as the images above. The Open Stage
@@ -285,8 +285,9 @@ export component MainWindow inherits Window {
     callback shutdown-toggled(bool);
     callback defender-toggled(bool);
     callback settings-opened();
-    // Takes the slot name — "activate", "protection", "realtime", "settings",
-    // "gig-performer" or "open-stage-control" — and the backend writes the
+    // Takes the slot name — "deactivation-state", "activation-state",
+    // "realtime-label", "manage-settings", "gig-performer" or
+    // "open-stage-control" — and the backend writes the
     // chosen path back into the matching property above, picking the file
     // filter from the slot. One argument rather than six callbacks, and
     // nothing to return: cancelling has to leave the field alone, which a
@@ -629,35 +630,35 @@ export component MainWindow inherits Window {
                             }
 
                             PathRow {
-                                label: "Activate image:";
+                                label: "Deactivation state image:";
                                 placeholder: "Built-in image";
-                                path <=> root.defender-activate-image;
-                                browse => { root.browse-for-path("activate"); }
+                                path <=> root.defender-deactivation-state-image;
+                                browse => { root.browse-for-path("deactivation-state"); }
                             }
 
                             PathRow {
-                                label: "Protection image:";
+                                label: "Activation state image:";
                                 placeholder: "Built-in image";
-                                path <=> root.defender-protection-image;
-                                browse => { root.browse-for-path("protection"); }
+                                path <=> root.defender-activation-state-image;
+                                browse => { root.browse-for-path("activation-state"); }
                             }
 
                             PathRow {
-                                label: "Realtime image:";
+                                label: "Realtime label image:";
                                 placeholder: "Built-in image";
-                                path <=> root.defender-realtime-image;
-                                browse => { root.browse-for-path("realtime"); }
+                                path <=> root.defender-realtime-label-image;
+                                browse => { root.browse-for-path("realtime-label"); }
                             }
 
                             PathRow {
-                                label: "Settings image:";
+                                label: "Manage settings image:";
                                 placeholder: "Built-in image";
-                                path <=> root.defender-settings-image;
-                                browse => { root.browse-for-path("settings"); }
+                                path <=> root.defender-manage-settings-image;
+                                browse => { root.browse-for-path("manage-settings"); }
                             }
 
                             Text {
-                                text: "Realtime clicks a fixed offset below where its image matches, not the image itself, so crop a replacement like the original.";
+                                text: "The two state images are named for what they show, so turning protection on looks for the deactivated card. The realtime label is not clicked: the click lands at a fixed offset below it, so crop a replacement like the original.";
                                 color: #9a9a9a;
                                 font-size: 12px;
                                 wrap: word-wrap;

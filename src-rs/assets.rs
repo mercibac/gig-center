@@ -81,42 +81,42 @@ fn decode(bytes: &[u8], name: &str) -> Option<GrayImage> {
 
 // The log name and bytes of each built-in template, kept as consts so both the
 // statics below and `defender_template` can reach them.
-const ACTIVATE_NAME: &str = "assets/defender_activate_icon.png";
-const ACTIVATE_BYTES: &[u8] = include_bytes!("../assets/defender_activate_icon.png");
-const PROTECTION_NAME: &str = "assets/defender_protection_icon.png";
-const PROTECTION_BYTES: &[u8] = include_bytes!("../assets/defender_protection_icon.png");
-const SETTINGS_NAME: &str = "assets/defender_settings_icon.png";
-const SETTINGS_BYTES: &[u8] = include_bytes!("../assets/defender_settings_icon.png");
-const REALTIME_NAME: &str = "assets/defender_realtime_icon.png";
-const REALTIME_BYTES: &[u8] = include_bytes!("../assets/defender_realtime_icon.png");
+const DEACTIVATION_STATE_NAME: &str = "assets/defender_activate_icon.png";
+const DEACTIVATION_STATE_BYTES: &[u8] = include_bytes!("../assets/defender_activate_icon.png");
+const ACTIVATION_STATE_NAME: &str = "assets/defender_protection_icon.png";
+const ACTIVATION_STATE_BYTES: &[u8] = include_bytes!("../assets/defender_protection_icon.png");
+const MANAGE_SETTINGS_NAME: &str = "assets/defender_settings_icon.png";
+const MANAGE_SETTINGS_BYTES: &[u8] = include_bytes!("../assets/defender_settings_icon.png");
+const REALTIME_LABEL_NAME: &str = "assets/defender_realtime_icon.png";
+const REALTIME_LABEL_BYTES: &[u8] = include_bytes!("../assets/defender_realtime_icon.png");
 
 /// The Defender steps whose template image can be replaced.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DefenderSlot {
-    Activate,
-    Protection,
-    Realtime,
-    Settings,
+    DeactivationState,
+    ActivationState,
+    RealtimeLabel,
+    ManageSettings,
 }
 
 impl DefenderSlot {
     /// The log name and bytes of the image compiled into the exe for this step.
     fn built_in(self) -> (&'static str, &'static [u8]) {
         match self {
-            Self::Activate => (ACTIVATE_NAME, ACTIVATE_BYTES),
-            Self::Protection => (PROTECTION_NAME, PROTECTION_BYTES),
-            Self::Realtime => (REALTIME_NAME, REALTIME_BYTES),
-            Self::Settings => (SETTINGS_NAME, SETTINGS_BYTES),
+            Self::DeactivationState => (DEACTIVATION_STATE_NAME, DEACTIVATION_STATE_BYTES),
+            Self::ActivationState => (ACTIVATION_STATE_NAME, ACTIVATION_STATE_BYTES),
+            Self::RealtimeLabel => (REALTIME_LABEL_NAME, REALTIME_LABEL_BYTES),
+            Self::ManageSettings => (MANAGE_SETTINGS_NAME, MANAGE_SETTINGS_BYTES),
         }
     }
 
     /// The path chosen for this step, empty when there is none.
     fn chosen(self, images: &DefenderImages) -> &str {
         match self {
-            Self::Activate => &images.activate,
-            Self::Protection => &images.protection,
-            Self::Realtime => &images.realtime,
-            Self::Settings => &images.settings,
+            Self::DeactivationState => &images.deactivation_state,
+            Self::ActivationState => &images.activation_state,
+            Self::RealtimeLabel => &images.realtime_label,
+            Self::ManageSettings => &images.manage_settings,
         }
     }
 }
@@ -184,10 +184,10 @@ mod tests {
     #[test]
     fn every_template_decodes_at_its_expected_size() {
         let expected = [
-            (DefenderSlot::Activate, 245, 237),
-            (DefenderSlot::Protection, 242, 185),
-            (DefenderSlot::Settings, 166, 60),
-            (DefenderSlot::Realtime, 123, 48),
+            (DefenderSlot::DeactivationState, 245, 237),
+            (DefenderSlot::ActivationState, 242, 185),
+            (DefenderSlot::ManageSettings, 166, 60),
+            (DefenderSlot::RealtimeLabel, 123, 48),
         ];
 
         for (slot, width, height) in expected {
@@ -206,10 +206,11 @@ mod tests {
 
     #[test]
     fn no_chosen_image_uses_the_one_in_the_exe() {
-        let template = defender_template(DefenderSlot::Activate, &DefenderImages::default());
+        let template =
+            defender_template(DefenderSlot::DeactivationState, &DefenderImages::default());
         let img = template.to_luma8().expect("the built-in image must decode");
         assert_eq!((img.width(), img.height()), (245, 237));
-        assert_eq!(template.name, ACTIVATE_NAME);
+        assert_eq!(template.name, DEACTIVATION_STATE_NAME);
     }
 
     /// Whitespace round a path should not count as a choice, so a field left
@@ -217,10 +218,10 @@ mod tests {
     #[test]
     fn a_blank_chosen_image_uses_the_one_in_the_exe() {
         let images = DefenderImages {
-            activate: "   ".into(),
+            deactivation_state: "   ".into(),
             ..Default::default()
         };
-        let template = defender_template(DefenderSlot::Activate, &images);
+        let template = defender_template(DefenderSlot::DeactivationState, &images);
         let img = template.to_luma8().expect("the built-in image must decode");
         assert_eq!((img.width(), img.height()), (245, 237));
     }
@@ -231,10 +232,10 @@ mod tests {
         write_png(&path, 60, 40);
 
         let images = DefenderImages {
-            activate: path.to_string_lossy().to_string(),
+            deactivation_state: path.to_string_lossy().to_string(),
             ..Default::default()
         };
-        let template = defender_template(DefenderSlot::Activate, &images);
+        let template = defender_template(DefenderSlot::DeactivationState, &images);
         let img = template.to_luma8().expect("the chosen image must decode");
 
         assert_eq!(
@@ -250,10 +251,10 @@ mod tests {
     #[test]
     fn a_missing_chosen_image_falls_back_to_the_one_in_the_exe() {
         let images = DefenderImages {
-            realtime: scratch("missing").to_string_lossy().to_string(),
+            realtime_label: scratch("missing").to_string_lossy().to_string(),
             ..Default::default()
         };
-        let template = defender_template(DefenderSlot::Realtime, &images);
+        let template = defender_template(DefenderSlot::RealtimeLabel, &images);
         let img = template
             .to_luma8()
             .expect("a missing chosen image must fall back, not give up");
@@ -266,10 +267,10 @@ mod tests {
         fs::write(&path, b"this is not an image").expect("could not write the test file");
 
         let images = DefenderImages {
-            settings: path.to_string_lossy().to_string(),
+            manage_settings: path.to_string_lossy().to_string(),
             ..Default::default()
         };
-        let template = defender_template(DefenderSlot::Settings, &images);
+        let template = defender_template(DefenderSlot::ManageSettings, &images);
         let img = template
             .to_luma8()
             .expect("a corrupt chosen image must fall back, not give up");
@@ -283,10 +284,10 @@ mod tests {
     #[test]
     fn the_console_names_the_chosen_image() {
         let images = DefenderImages {
-            protection: "D:/shots/mine.png".into(),
+            activation_state: "D:/shots/mine.png".into(),
             ..Default::default()
         };
-        let template = defender_template(DefenderSlot::Protection, &images);
+        let template = defender_template(DefenderSlot::ActivationState, &images);
         assert_eq!(template.name, "D:/shots/mine.png");
     }
 

@@ -14,28 +14,35 @@ use std::path::{Path, PathBuf};
 /// fields in [`Settings`]; [`merge_from_form`] says why.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DefenderImages {
-    /// The "Virus & threat protection" card as it looks with Defender on.
+    // These two are named for the state the image *shows*, not the step it is
+    // used in. That is the opposite way round, and it is the part that reads
+    // oddly until you see why: the card is matched *before* the click, so
+    // turning protection back on has to look for the card as it appears while
+    // protection is off.
+    /// The "Virus & threat protection" card as it looks while real-time
+    /// protection is off. Matched on the way back on, during CLEAR DECK.
     #[serde(default)]
-    pub activate: String,
-    /// The same card as it looks with Defender off.
+    pub deactivation_state: String,
+    /// The same card as it looks while real-time protection is on. Matched on
+    /// the way off, during LAUNCH.
     #[serde(default)]
-    pub protection: String,
+    pub activation_state: String,
     /// The "Real-time protection" label the last click is offset from.
     #[serde(default)]
-    pub realtime: String,
+    pub realtime_label: String,
     /// The "Manage settings" link.
     #[serde(default)]
-    pub settings: String,
+    pub manage_settings: String,
 }
 
 impl DefenderImages {
     /// Trim every path, the way the text fields are trimmed on save.
     fn trimmed(self) -> Self {
         Self {
-            activate: self.activate.trim().to_string(),
-            protection: self.protection.trim().to_string(),
-            realtime: self.realtime.trim().to_string(),
-            settings: self.settings.trim().to_string(),
+            deactivation_state: self.deactivation_state.trim().to_string(),
+            activation_state: self.activation_state.trim().to_string(),
+            realtime_label: self.realtime_label.trim().to_string(),
+            manage_settings: self.manage_settings.trim().to_string(),
         }
     }
 }
@@ -241,7 +248,7 @@ mod tests {
             shutdown_after_clear: true,
             manage_defender: false,
             defender_images: DefenderImages {
-                activate: "D:/shots/activate.png".into(),
+                deactivation_state: "D:/shots/deactivation_state.png".into(),
                 ..Default::default()
             },
             executables: Executables {
@@ -323,15 +330,21 @@ mod tests {
             stored(),
             FormInput {
                 defender_images: DefenderImages {
-                    activate: "D:/shots/new_activate.png".into(),
-                    realtime: "D:/shots/new_realtime.png".into(),
+                    deactivation_state: "D:/shots/new_deactivation_state.png".into(),
+                    realtime_label: "D:/shots/new_realtime_label.png".into(),
                     ..Default::default()
                 },
                 ..form()
             },
         );
-        assert_eq!(saved.defender_images.activate, "D:/shots/new_activate.png");
-        assert_eq!(saved.defender_images.realtime, "D:/shots/new_realtime.png");
+        assert_eq!(
+            saved.defender_images.deactivation_state,
+            "D:/shots/new_deactivation_state.png"
+        );
+        assert_eq!(
+            saved.defender_images.realtime_label,
+            "D:/shots/new_realtime_label.png"
+        );
     }
 
     /// Guards the Default button. Unlike the device dropdowns, an empty image
@@ -353,13 +366,16 @@ mod tests {
             stored(),
             FormInput {
                 defender_images: DefenderImages {
-                    settings: "  D:/shots/settings.png  ".into(),
+                    manage_settings: "  D:/shots/manage_settings.png  ".into(),
                     ..Default::default()
                 },
                 ..form()
             },
         );
-        assert_eq!(saved.defender_images.settings, "D:/shots/settings.png");
+        assert_eq!(
+            saved.defender_images.manage_settings,
+            "D:/shots/manage_settings.png"
+        );
     }
 
     #[test]

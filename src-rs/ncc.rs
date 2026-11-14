@@ -429,7 +429,7 @@ mod tests {
     #[test]
     fn full_screen_search_is_fast() {
         let template = crate::assets::defender_template(
-            crate::assets::DefenderSlot::Activate,
+            crate::assets::DefenderSlot::DeactivationState,
             &Default::default(),
         )
         .to_luma8()
@@ -476,7 +476,7 @@ mod tests {
         use imageproc::template_matching::{match_template, MatchTemplateMethod};
 
         let template = crate::assets::defender_template(
-            crate::assets::DefenderSlot::Activate,
+            crate::assets::DefenderSlot::DeactivationState,
             &Default::default(),
         )
         .to_luma8()
