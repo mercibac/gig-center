@@ -103,9 +103,11 @@ on Windows runners, since there is no other kind of build here. Three jobs:
 | Release build | `cargo build --release` |
 | Python | `ruff check --select E9,F`, `uv run --with pytest pytest src-py/tests` |
 
-Clippy is a hard gate, so the tree is kept at zero warnings. Ruff is limited to
-the rules that catch mistakes rather than style, and pinned, so the gate does
-not move on its own.
+Clippy is a hard gate, so the tree is kept at zero warnings. Both toolchains are
+pinned — Rust to 1.97.1, ruff to 0.15.22 with only the rules that catch mistakes
+rather than style — so a gate never moves on its own. A floating `stable` turned
+main red on this workflow's first run, over a lint that did not exist when the
+code was written. Bump the pins deliberately, as their own commit.
 
 The Python job is the one that covers what the two implementations share:
 `src-py/tests/test_shared_assets.py` checks that `ui/app.slint` still loads for

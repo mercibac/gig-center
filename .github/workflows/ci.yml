@@ -30,8 +30,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Pinned, for the same reason ruff is below and slint is in Cargo.toml:
+      # `stable` moves, and a clippy that gains a lint overnight turns a green
+      # main red without a line of code changing — which is exactly what the
+      # first run of this workflow did. Bump it deliberately, as its own
+      # commit, so new lints arrive somewhere you can read them.
       - uses: dtolnay/rust-toolchain@stable
         with:
+          toolchain: "1.97.1"
           components: rustfmt, clippy
 
       - uses: Swatinem/rust-cache@v2
@@ -58,7 +64,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Same pin as the job above — the shipped binary should not be built by
+      # whichever compiler happened to be stable that morning.
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.97.1"
 
       - uses: Swatinem/rust-cache@v2
         with:

@@ -207,8 +207,14 @@ fn capture_screen() -> Option<GrayImage> {
 
         // Convert BGRA → Luma8 (grayscale)
         // Standard luminance formula: Y = 0.299*R + 0.587*G + 0.114*B
+        //
+        // as_chunks rather than chunks_exact, so each pixel arrives as a
+        // [u8; 4] whose length the compiler knows: the four indexes below stop
+        // being bounds-checked, on a loop that runs once per screen pixel.
         let gray_pixels: Vec<u8> = buffer
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .map(|bgra| {
                 (0.299 * bgra[2] as f32 + 0.587 * bgra[1] as f32 + 0.114 * bgra[0] as f32) as u8
             })
