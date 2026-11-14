@@ -1,2 +1,11 @@
 # Rust
 /target
+
+# Installer output from a local ISCC run; see cmds.md
+/dist
+
+# Runtime config. The app writes this next to the exe on first save, so a
+# clone has none and starts from the built-in defaults — which is exactly
+# what a fresh install does. It was tracked once, and that shipped one
+# machine's device names and preset paths to everyone who cloned.
+/settings.json
