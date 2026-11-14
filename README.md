@@ -92,6 +92,28 @@ Tests for the Rust screen matcher:
 cargo test
 ```
 
+## CI
+
+`.github/workflows/ci.yml` runs on every pull request and every push to `main`,
+on Windows runners, since there is no other kind of build here. Three jobs:
+
+| Job | What it runs |
+| --- | --- |
+| Rust | `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test` |
+| Release build | `cargo build --release` |
+| Python | `ruff check --select E9,F`, `uv run --with pytest pytest src-py/tests` |
+
+Clippy is a hard gate, so the tree is kept at zero warnings. Ruff is limited to
+the rules that catch mistakes rather than style, and pinned, so the gate does
+not move on its own.
+
+The Python job is the one that covers what the two implementations share:
+`src-py/tests/test_shared_assets.py` checks that `ui/app.slint` still loads for
+the Python build, that every asset the automation reaches for by path is there,
+and that both packaging commands in `cmds.md` bundle the same, existing files —
+the failure cmds.md warns about, where a missing entry only shows up when the
+packaged exe is launched.
+
 The Python entry point resolves `ui/`, `assets/` and `settings.json` relative to
 its own location, so it runs from any working directory. The Rust build reads
 `settings.json` from the working directory only when the exe sits directly in

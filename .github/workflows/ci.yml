@@ -1,0 +1,104 @@
+name: CI
+
+# Every job runs on Windows because the whole repository does: Win32 FFI and
+# GDI screen capture on the Rust side, pycaw and input synthesis on the Python
+# side, and a release build that embeds a Windows icon. There is no Linux job
+# missing here — there is no Linux build.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A second push makes the run in flight pointless, and Windows runners are the
+# slow kind to leave sitting in a queue.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  rust:
+    name: Rust
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Format
+        run: cargo fmt --check
+
+      # -D warnings, because a warning nothing fails on is a warning nobody
+      # reads. The repository was brought to zero before this gate went in, so
+      # anything it reports from here is new.
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      # Covers the screen matcher against its reference implementation, the
+      # settings merge rules, device fallback, and that every embedded Defender
+      # template still decodes at the size it has always had.
+      - name: Tests
+        run: cargo test
+
+  release:
+    name: Release build
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          # The release profile shares no artifacts with the debug one the job
+          # above caches, so it gets its own entry instead of thrashing that.
+          key: release
+
+      # Kept out of the Rust job because lto = "fat" makes this much the
+      # slowest thing here and it should not hold up the quick feedback. Worth
+      # running at all because a wrong include_bytes! path, a missing asset or
+      # a broken ui/app.slint are only resolved by a real build.
+      - name: Build
+        run: cargo build --release
+
+  python:
+    name: Python
+    runs-on: windows-latest
+    timeout-minutes: 20
+    env:
+      # Match the renderer the app itself selects, so nothing here depends on
+      # a GPU being present on the runner.
+      SLINT_BACKEND: winit-software
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      # The default rule set is ~30 style findings against code that predates
+      # it, which would make this gate noise. E9 and F are the ones that catch
+      # mistakes rather than opinions: syntax errors, undefined names, unused
+      # imports and variables. Pinned, because which of those a release flags
+      # moves between ruff versions, and a lint that changes under you is
+      # worse than no lint.
+      - name: Lint
+        run: uvx ruff@0.15.22 check --select E9,F .
+
+      # Despite the job name this covers both implementations: src-py/tests
+      # also holds the checks on ui/app.slint and on the packaging commands,
+      # which are shared. See test_shared_assets.py for why those matter.
+      - name: Tests
+        run: uv run --with pytest pytest src-py/tests -q
