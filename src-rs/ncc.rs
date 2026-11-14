@@ -11,7 +11,7 @@
 //! The first Rust port called `imageproc::match_template`, whose `score_at`
 //! re-reads the entire template — plus the window's sum of squares — at *every*
 //! output position. That is `O(screen_area × template_area)`. For a 1536×864
-//! screen and the 245×237 `defender_activate_icon.png` that is
+//! screen and the 245×237 `defender_deactivation_state.png` that is
 //! 1292 × 628 = 811 376 positions × 58 065 template pixels × 2 accumulators
 //! ≈ **94 billion** floating-point operations for a single lookup, and
 //! `switch_defender` performs three lookups per call. That, not any of the

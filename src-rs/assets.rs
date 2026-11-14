@@ -81,14 +81,14 @@ fn decode(bytes: &[u8], name: &str) -> Option<GrayImage> {
 
 // The log name and bytes of each built-in template, kept as consts so both the
 // statics below and `defender_template` can reach them.
-const DEACTIVATION_STATE_NAME: &str = "assets/defender_activate_icon.png";
-const DEACTIVATION_STATE_BYTES: &[u8] = include_bytes!("../assets/defender_activate_icon.png");
-const ACTIVATION_STATE_NAME: &str = "assets/defender_protection_icon.png";
-const ACTIVATION_STATE_BYTES: &[u8] = include_bytes!("../assets/defender_protection_icon.png");
-const MANAGE_SETTINGS_NAME: &str = "assets/defender_settings_icon.png";
-const MANAGE_SETTINGS_BYTES: &[u8] = include_bytes!("../assets/defender_settings_icon.png");
-const REALTIME_LABEL_NAME: &str = "assets/defender_realtime_icon.png";
-const REALTIME_LABEL_BYTES: &[u8] = include_bytes!("../assets/defender_realtime_icon.png");
+const DEACTIVATION_STATE_NAME: &str = "assets/defender_deactivation_state.png";
+const DEACTIVATION_STATE_BYTES: &[u8] = include_bytes!("../assets/defender_deactivation_state.png");
+const ACTIVATION_STATE_NAME: &str = "assets/defender_activation_state.png";
+const ACTIVATION_STATE_BYTES: &[u8] = include_bytes!("../assets/defender_activation_state.png");
+const MANAGE_SETTINGS_NAME: &str = "assets/defender_manage_settings.png";
+const MANAGE_SETTINGS_BYTES: &[u8] = include_bytes!("../assets/defender_manage_settings.png");
+const REALTIME_LABEL_NAME: &str = "assets/defender_realtime_label.png";
+const REALTIME_LABEL_BYTES: &[u8] = include_bytes!("../assets/defender_realtime_label.png");
 
 /// The Defender steps whose template image can be replaced.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -150,16 +150,16 @@ says so in the console, rather than leaving the automation clicking nothing.
 
 | Key | What the image shows | Bundled file |
 | --- | --- | --- |
-| `deactivation_state` | The protection card while real-time protection is **off** | `defender_activate_icon.png` |
-| `activation_state` | The same card while it is **on** | `defender_protection_icon.png` |
-| `realtime_label` | The "Real-time protection" label | `defender_realtime_icon.png` |
-| `manage_settings` | The "Manage settings" link | `defender_settings_icon.png` |
+| `deactivation_state` | The protection card while real-time protection is **off** | `defender_deactivation_state.png` |
+| `activation_state` | The same card while it is **on** | `defender_activation_state.png` |
+| `realtime_label` | The "Real-time protection" label | `defender_realtime_label.png` |
+| `manage_settings` | The "Manage settings" link | `defender_manage_settings.png` |
 
 The first two are named for the state the image *shows*, not the step it is used
 in, because the card is matched before the click: switching protection back on
-has to find the card as it looks while protection is off. The bundled filenames
-still carry the older wording — they are shared with the Python build, so
-renaming them is a separate job.
+has to find the card as it looks while protection is off. The files carry no
+`_icon` suffix, unlike the rest of `assets/` — these are screenshots the matcher
+searches the screen for, not icons anything draws.
 
 Only the Rust build acts on `defender_images`. The Python build shows the
 Advanced fields but its Browse buttons do nothing, and it neither reads the
