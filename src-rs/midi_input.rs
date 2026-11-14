@@ -97,10 +97,11 @@ impl MidiListener {
         // them here means they never reach the callback at all.
         midi_in.ignore(Ignore::All);
 
-        let port = midi_in
-            .ports()
-            .into_iter()
-            .find(|port| midi_in.port_name(port).is_ok_and(|name| name == device_name));
+        let port = midi_in.ports().into_iter().find(|port| {
+            midi_in
+                .port_name(port)
+                .is_ok_and(|name| name == device_name)
+        });
         let Some(port) = port else {
             return false;
         };
@@ -169,7 +170,10 @@ mod tests {
     #[test]
     fn falls_back_when_nothing_was_ever_saved() {
         let available = vec!["Launchkey 1".to_string()];
-        assert_eq!(choose_device("", &available).as_deref(), Some("Launchkey 1"));
+        assert_eq!(
+            choose_device("", &available).as_deref(),
+            Some("Launchkey 1")
+        );
     }
 
     #[test]

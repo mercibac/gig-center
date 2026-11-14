@@ -22,13 +22,16 @@ pub struct Devices {
     pub audio: Vec<String>,
 }
 
+/// The parked handler: run once, with the devices, and only on this thread.
+type ReadyHandler = Box<dyn FnOnce(Devices)>;
+
 thread_local! {
     /// What to do with the devices once they exist, parked here until they do.
     ///
     /// Lives in a thread-local because applying them needs the `Rc<RefCell<…>>`
     /// state every callback shares, which cannot cross threads — the same
     /// reason, and the same shape, as `first_paint::run_after_first_frame`.
-    static ON_READY: RefCell<Option<Box<dyn FnOnce(Devices)>>> = const { RefCell::new(None) };
+    static ON_READY: RefCell<Option<ReadyHandler>> = const { RefCell::new(None) };
 }
 
 /// Register what to do when the devices arrive. Call from the UI thread, and

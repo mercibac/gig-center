@@ -66,7 +66,9 @@ pub fn mark(name: &'static str) {
         return;
     };
     let now = Instant::now();
-    probe.phases.push((name, (now - probe.last).as_secs_f64() * 1000.0));
+    probe
+        .phases
+        .push((name, (now - probe.last).as_secs_f64() * 1000.0));
     probe.last = now;
 }
 

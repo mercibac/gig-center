@@ -155,7 +155,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 app.set_launch_text("LAUNCH GIG RIG".into());
                 app.set_clear_text("CLEAR DECK".into());
                 app.set_buttons_enabled(true);
-                
+
                 // Also log ready
                 let mut current: String = app.get_console_text().into();
                 current.push_str("\n--- SYSTEM READY ---\n");
@@ -373,7 +373,11 @@ fn main() -> Result<(), slint::PlatformError> {
         console_log!(
             "
 Shutdown after CLEAR DECK: {}",
-            if enabled { "ON — the PC will power off." } else { "off." }
+            if enabled {
+                "ON — the PC will power off."
+            } else {
+                "off."
+            }
         );
     });
 

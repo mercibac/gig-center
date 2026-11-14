@@ -139,7 +139,6 @@ fn config_dir() -> PathBuf {
     std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
 }
 
-
 /// Get the full path to settings.json.
 pub fn config_path() -> PathBuf {
     config_dir().join("settings.json")

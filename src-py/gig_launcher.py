@@ -126,7 +126,6 @@ def launch_programs(phone_name):
     osc_path = (
         r"D:\Apps\portable\open-stage-control_1.30.1_win32-x64\open-stage-control.exe"
     )
-    osc_sessions_dir = r"D:\BANK\Presets\Archives"
 
     # ---------------------------------------------------------
     # 2. Launch Applications
