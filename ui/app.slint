@@ -1,8 +1,7 @@
 import { LineEdit, VerticalBox, ScrollView, HorizontalBox, ComboBox, Switch } from "std-widgets.slint";
 import { SplashWindow } from "splash.slint";
 
-// Re-exported so both builds keep a single compile entry: build.rs compiles
-// this file, and slint.load_file loads this file.
+// Re-exported so there is a single compile entry: build.rs compiles this file.
 export { SplashWindow }
 
 // ==========================================
@@ -90,8 +89,7 @@ component FoldHeader inherits Rectangle {
 // LAUNCH starts: where it is, a picker, and the way back to the original.
 //
 // Empty text means the built-in default, which is why Default is a single
-// assignment with no backend round trip — it works the same in both builds,
-// even though only the Rust one answers `browse`.
+// assignment with no backend round trip — only `browse` needs one.
 //
 // Label and field keep the 170px/20px column the rows above use; the buttons
 // sit in their own 8px group so the row's natural minimum stays narrow enough

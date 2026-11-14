@@ -13,7 +13,7 @@ const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 fn open_windows_defender() {
     // `start windowsdefender:` is the CMD command that opens the Security Center,
-    // mirroring switch_defender.py's subprocess call instead of UI keystrokes.
+    // mirroring what the Python prototype did, instead of UI keystrokes.
     // CREATE_NO_WINDOW keeps the cmd host hidden so nothing pops up on screen.
     match Command::new("cmd")
         .args(["/C", "start", "windowsdefender:"])
@@ -67,7 +67,7 @@ pub fn switch_defender(option: &str) {
     let icon_def_2 = assets::defender_template(DefenderSlot::ManageSettings, &images);
     screen::click_on_img(&icon_def_2, &mut enigo);
 
-    // 0.9, not the 0.8 default — switch_defender.py asks for the stricter
+    // 0.9, not the 0.8 default — the Python prototype asked for the stricter
     // confidence on this one because the click target is derived by offset.
     //
     // The click below is an offset from wherever this image matched, not on the

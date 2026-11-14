@@ -6,39 +6,33 @@ switches the PC onto the phone's hotspot, launches Gig Performer and Open Stage
 Control, sends the OSC url to the phone, and snaps the windows into place.
 Another button tears it all back down.
 
-The project holds **two complete implementations** of the same app — one in
-Python, one in Rust. They are independent, and either can be built and shipped
-on its own. What they share is the UI definition, the image assets and the
-settings file.
+Rust and Slint, building a single self-contained `.exe`. The UI, the icons and
+the screen-match templates are all compiled in, so the binary needs nothing
+beside it.
+
+> This started as a Python prototype, which was ported to Rust and then split out
+> to `E:\projects\gig-center-prototype` once the Rust version took over. That
+> clone keeps the full history, so the Python side is still there to read.
+> Comments here that mention "the Python prototype" are pointing at it.
 
 ## Structure
 
 ```
 gig-center/
 ├── ui/
-│   └── app.slint            Shared Slint UI — both versions render this same file
-├── assets/                  Shared images: window/exe icons, and the screen-match
-│                            templates the automation clicks on
-├── settings.json            Shared runtime config: phone name, hotspot name, OSC preset path
+│   ├── app.slint            The UI, compiled by build.rs
+│   └── splash.slint         The splash screen, re-exported through app.slint
+├── assets/                  Images: window/exe icons, the splash art, and the
+│                            screen-match templates the automation clicks on
+├── settings.json            Runtime config: phone name, hotspot name, OSC preset path
 │
-├── src-py/                  Python version
-│   ├── main.py              Entry point: loads the UI, wires buttons, redirects the console
-│   ├── utils.py             resource_path, settings loading, volume control, timing
-│   ├── gig_launcher.py      The LAUNCH GIG RIG sequence
-│   ├── gig_close.py         The CLEAR DECK sequence
-│   ├── connection.py        Wi-Fi / hotspot detection
-│   ├── snap.py              Window positioning
-│   ├── switch_defender.py   Toggles Defender real-time protection
-│   ├── switch_sleep.py      Toggles sleep and monitor timeouts
-│   ├── midi_input.py        MIDI input watching, behind the activity LED
-│   ├── window_setup.py      Title bar icon and centring — Win32, since Slint's
-│   │                        Python binding exposes neither
-│   └── tests/               pytest suite (see cmds.md)
-│
-├── src-rs/                  Rust version
-│   ├── build.rs             Compiles ui/app.slint, embeds assets/icon.ico, pre-scales the window icon
+├── build.rs                 Compiles ui/app.slint, embeds assets/icon.ico,
+│                            pre-scales the window icon
+├── src/
 │   ├── main.rs              Entry point: backend selection, UI wiring
+│   ├── backend.rs           Renderer and windowing backend selection
 │   ├── assets.rs            The screen-match templates, compiled into the binary
+│   ├── splash_art.rs        The splash artwork, compiled into the binary
 │   ├── utils.rs             resource_path, volume control, timing
 │   ├── settings.rs          Load/save settings.json
 │   ├── console.rs           Thread-safe log buffer feeding the on-screen console
@@ -48,106 +42,79 @@ gig-center/
 │   ├── snap.rs              Window positioning
 │   ├── switch_defender.rs   Toggles Defender real-time protection
 │   ├── switch_sleep.rs      Toggles sleep and monitor timeouts
-│   ├── screen.rs, ncc.rs    Screen matching — finds a template image on screen and clicks it
+│   ├── screen.rs, ncc.rs    Screen matching — finds a template image on screen
+│   │                        and clicks it
 │   ├── center.rs            Centres the window on the primary monitor
 │   ├── midi_input.rs        MIDI input watching, behind the activity LED
+│   ├── audio_input.rs       Audio output watching, behind the signal LED
 │   └── app_icon.rs, first_paint.rs, startup_probe.rs
 │                            Window icon, first-frame cloaking, startup instrumentation
 │
 ├── Cargo.toml, Cargo.lock   Rust manifest (must stay at the root)
-├── pyproject.toml, uv.lock  Python dependencies
-├── cmds.md                  The build commands for both versions
+├── cmds.md                  The build command
 └── target/                  All build output, git-ignored
-    └── release/
-        ├── python/Gig Control Center.exe
-        └── rust/Gig Control Center.exe
+    └── release/rust/Gig Control Center.exe
 ```
 
-Both versions carry the same features: the MIDI activity LED and device
-picker, the Defender button that skips the `switch_defender` step, and the
-shutdown-after-CLEAR-DECK toggle.
-
-Most modules in `src-py/` have a same-named counterpart in `src-rs/`. The extras
-on the Rust side are things Python gets from its libraries: `screen.rs`/`ncc.rs`
-replace `pyautogui.locateCenterOnScreen`, and `console.rs` replaces the
-`ConsoleRedirector` that lives inside `main.py`.
+`build.rs` sits at the root rather than inside `src/`, which is where Cargo looks
+for it by default — that is why the manifest names neither the build script nor
+the binary.
 
 ## Running
-
-Python:
-
-```bash
-uv run python src-py/main.py
-```
-
-Rust:
 
 ```bash
 cargo run --release
 ```
 
-Tests for the Rust screen matcher:
-
 ```bash
 cargo test
 ```
 
+Release is worth preferring for anything involving the screen matcher: it is
+numeric hot code, and an unoptimised build makes it tens of times slower, which
+is what made "clicking an image" feel broken in dev runs. `[profile.dev]` raises
+`opt-level` for exactly that reason.
+
 ## CI
 
 `.github/workflows/ci.yml` runs on every pull request and every push to `main`,
-on Windows runners, since there is no other kind of build here. Three jobs:
+on Windows runners, since there is no other kind of build here. Two jobs:
 
 | Job | What it runs |
 | --- | --- |
 | Rust | `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test` |
 | Release build | `cargo build --release` |
-| Python | `ruff check --select E9,F`, `uv run --with pytest pytest src-py/tests` |
 
-Clippy is a hard gate, so the tree is kept at zero warnings. Both toolchains are
-pinned — Rust to 1.97.1, ruff to 0.15.22 with only the rules that catch mistakes
-rather than style — so a gate never moves on its own. A floating `stable` turned
+Clippy is a hard gate, so the tree is kept at zero warnings. The toolchain is
+pinned to 1.97.1 so a gate never moves on its own. A floating `stable` turned
 main red on this workflow's first run, over a lint that did not exist when the
-code was written. Bump the pins deliberately, as their own commit.
+code was written. Bump the pin deliberately, as its own commit.
 
-The Python job is the one that covers what the two implementations share:
-`src-py/tests/test_shared_assets.py` checks that `ui/app.slint` still loads for
-the Python build, that every asset the automation reaches for by path is there,
-and that both packaging commands in `cmds.md` bundle the same, existing files —
-the failure cmds.md warns about, where a missing entry only shows up when the
-packaged exe is launched.
+The release build is kept out of the quick job because `lto = "fat"` makes it
+much the slowest thing here. It is also what covers the parts of the tree no unit
+test reaches: `build.rs` compiles `ui/app.slint`, and the `include_bytes!` calls
+in `assets.rs` and `splash_art.rs` fail the build if a template is renamed or
+missing. Those two used to be checked by a test on the Python side; the build
+does it now.
 
-The Python entry point resolves `ui/`, `assets/` and `settings.json` relative to
-its own location, so it runs from any working directory. The Rust build reads
-`settings.json` from the working directory only when the exe sits directly in
-`target/debug` or `target/release`, which is what `cargo run` gives it —
-anywhere else, the shipped copy in `release/rust/` included, it keeps its
+The exe reads `settings.json` from the working directory only when it sits
+directly in `target/debug` or `target/release`, which is what `cargo run` gives
+it — anywhere else, the shipped copy in `release/rust/` included, it keeps its
 settings beside the exe.
 
 ## Packaging
 
-Both versions ship as `Gig Control Center.exe`, side by side under `target/`,
-which is git-ignored in full:
-
 ```
-target/release/python/Gig Control Center.exe    pyinstaller onefile, ~67 MB
 target/release/rust/Gig Control Center.exe      cargo release build, ~11 MB
 ```
 
-The exact commands are in [cmds.md](cmds.md). In short:
+The exact command is in [cmds.md](cmds.md). In short: `cargo build --release`,
+then copy the binary into `release/rust/` under the shipped name. Cargo cannot do
+either step itself — a bin target's name becomes the crate name, and rustc
+rejects spaces in it. The build is self-contained, so the exe needs nothing
+beside it.
 
-**Rust** — `cargo build --release`, then copy the binary into `release/rust/`
-under the shipped name. Cargo cannot do either step itself: a bin target's name
-becomes the crate name, and rustc rejects spaces in it. The build is
-self-contained — the UI, the icons and the screen-match templates are compiled
-in — so the exe needs nothing beside it.
-
-**Python** — PyInstaller, one self-extracting file. Nothing is compiled in, so
-`ui/app.slint`, the `assets/` images and `settings.json` all have to be listed
-on the command line; miss one and the build only fails when you launch it. A
-Nuitka recipe is kept in cmds.md as an alternative, but PyInstaller is what
-produces the layout above.
-
-`cargo clean` empties `target/` entirely — the Python build with it.
+`cargo clean` empties `target/` entirely.
 
 ## Settings
 
@@ -185,12 +152,6 @@ has to find the card as it looks while protection is off. The files carry no
 `_icon` suffix, unlike the rest of `assets/` — these are screenshots the matcher
 searches the screen for, not icons anything draws.
 
-Only the Rust build acts on `defender_images`. The Python build shows the
-Advanced fields but its Browse buttons do nothing, and it neither reads the
-paths nor applies them to its own Defender step. It does keep them: it loads
-`settings.json` whole and writes it back whole, so saving from the Python build
-leaves the block intact rather than clearing it.
-
 One caveat for `realtime_label`: that step clicks a fixed offset below wherever
 the image matched rather than the image itself, so a replacement has to be
 cropped the same way as the original for the offset to still land on the toggle.
@@ -209,8 +170,13 @@ goes stale on every upgrade — that is mainly what this is for. A path that is
 no longer there falls back to the built-in one and says so in the console,
 rather than starting nothing; LAUNCH also logs which executable it used.
 
-A packaged build keeps its own copy next to the `.exe`. The Python builds ship
-the repository's `settings.json` inside the bundle and seed that copy from it —
-on a fresh install, and again if the file is ever corrupted — so an install
-starts with working values rather than placeholders. The Rust build carries no
-bundled copy and starts from its built-in defaults.
+A packaged build keeps its own `settings.json` next to the `.exe`. Nothing ships
+bundled alongside it, so a fresh install starts from the built-in defaults and
+writes the file on first save.
+
+## Regenerating the assets
+
+`assets/icon.ico`, `splash_logo.png` and `splash_shine.png` are committed, and
+the build consumes them as they are. The Pillow scripts that generate them from
+`assets/icon.png` live with the Python prototype — retuning the splash artwork
+means running them there and copying the output back.
