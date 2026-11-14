@@ -2,7 +2,7 @@
 //!
 //! midir delivers messages on its own thread, so nothing here touches the UI.
 //! The listener only records *when* a message last arrived; the UI polls that
-//! on its own timer and lights the LED. Port of src-py/midi_input.py.
+//! on its own timer and lights the LED. Ported from the Python prototype.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock};

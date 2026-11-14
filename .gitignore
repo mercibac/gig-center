@@ -1,18 +1,2 @@
-# Python-generated files
-__pycache__/
-*.py[oc]
-build/
-dist/
-*.spec
-wheels/
-*.egg-info
-
-# Nuitka build output — main.dist/ holds the packaged .exe
-*.build/
-*.dist/
-
-# Virtual environments
-.venv
-
 # Rust
 /target

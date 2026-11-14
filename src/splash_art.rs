@@ -5,7 +5,8 @@
 //! was copied to, and resolving asset paths against the working directory is
 //! what made the Defender templates silently unavailable in release builds.
 //!
-//! Both images are produced by `assets/make_splash_logo.py`.
+//! Both images are generated from `assets/icon.png` by make_splash_logo.py,
+//! which now lives with the Python prototype.
 
 use slint::{Image, Rgba8Pixel, SharedPixelBuffer};
 

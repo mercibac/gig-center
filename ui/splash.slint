@@ -4,10 +4,10 @@
 // Shown on its own borderless window while the backend starts, and replaced by
 // the main window once it is ready. Kept in its own file because it shares
 // nothing with the main UI but the colour palette; app.slint re-exports it so
-// both builds still compile a single entry point.
+// there is still a single compile entry point.
 //
-// The animation lives entirely here, so it cannot drift between the Rust and
-// Python versions. A negative `iteration-count` means "forever" (verified in
+// The animation lives entirely here, so there is one place it can change.
+// A negative `iteration-count` means "forever" (verified in
 // i-slint-core's properties_animations.rs), and `direction: alternate` makes
 // the value ping-pong rather than snap back.
 
@@ -25,7 +25,7 @@ export component SplashWindow inherits Window {
     // The backend supplies the artwork and narrates what it is doing.
     //
     // The shine is an image rather than a gradient brush because its falloff is
-    // shaped precisely in assets/make_splash_logo.py — a raised cosine, so the
+    // shaped precisely by the generator script — a raised cosine, so the
     // edges vanish instead of ending. Both renderers this project uses do
     // support gradients; this is a choice about control, not capability.
     in property <image> logo;
@@ -41,10 +41,9 @@ export component SplashWindow inherits Window {
     }
 
     // The face of the disc occupies 75% of the asset's canvas and sits 2%
-    // above its centre — see assets/make_splash_logo.py, where the 480px face
-    // is inset in a 640px canvas with the extrusion below it. The shine has to
-    // be clipped to exactly that circle, or it would streak across the
-    // transparent corners.
+    // above its centre: the 480px face is inset in a 640px canvas with the
+    // extrusion below it. The shine has to be clipped to exactly that circle,
+    // or it would streak across the transparent corners.
     property <length> logo-box: root.running ? 210px : 178px;
     property <length> disc: root.logo-box * 0.75;
     property <length> disc-cx: (root.width - root.disc) / 2;
