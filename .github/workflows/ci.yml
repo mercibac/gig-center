@@ -1,9 +1,8 @@
 name: CI
 
-# Every job runs on Windows because the whole repository does: Win32 FFI and
-# GDI screen capture on the Rust side, pycaw and input synthesis on the Python
-# side, and a release build that embeds a Windows icon. There is no Linux job
-# missing here — there is no Linux build.
+# Every job runs on Windows because the whole repository does: Win32 FFI, GDI
+# screen capture, and a release build that embeds a Windows icon. There is no
+# Linux job missing here — there is no Linux build.
 
 on:
   push:
@@ -30,7 +29,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Pinned, for the same reason ruff is below and slint is in Cargo.toml:
+      # Pinned, for the same reason slint is pinned in Cargo.toml:
       # `stable` moves, and a clippy that gains a lint overnight turns a green
       # main red without a line of code changing — which is exactly what the
       # first run of this workflow did. Bump it deliberately, as its own
@@ -82,33 +81,3 @@ jobs:
       # a broken ui/app.slint are only resolved by a real build.
       - name: Build
         run: cargo build --release
-
-  python:
-    name: Python
-    runs-on: windows-latest
-    timeout-minutes: 20
-    env:
-      # Match the renderer the app itself selects, so nothing here depends on
-      # a GPU being present on the runner.
-      SLINT_BACKEND: winit-software
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: astral-sh/setup-uv@v5
-        with:
-          enable-cache: true
-
-      # The default rule set is ~30 style findings against code that predates
-      # it, which would make this gate noise. E9 and F are the ones that catch
-      # mistakes rather than opinions: syntax errors, undefined names, unused
-      # imports and variables. Pinned, because which of those a release flags
-      # moves between ruff versions, and a lint that changes under you is
-      # worse than no lint.
-      - name: Lint
-        run: uvx ruff@0.15.22 check --select E9,F .
-
-      # Despite the job name this covers both implementations: src-py/tests
-      # also holds the checks on ui/app.slint and on the packaging commands,
-      # which are shared. See test_shared_assets.py for why those matter.
-      - name: Tests
-        run: uv run --with pytest pytest src-py/tests -q
