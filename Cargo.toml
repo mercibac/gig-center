@@ -1,8 +1,11 @@
 [package]
 name = "gig-center"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2021"
 description = "Gig Control Center - Live performance setup automation"
+authors = ["Merbac"]
+license = "MIT"
+repository = "https://github.com/mercibac/gig-center"
 
 [dependencies]
 # Default features minus `renderer-femtovg`: the OpenGL renderer is never

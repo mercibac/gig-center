@@ -21,6 +21,7 @@ mod startup_probe;
 mod switch_defender;
 mod switch_sleep;
 mod utils;
+mod version;
 
 use settings::{DefenderImages, Executables};
 use slint::{Timer, TimerMode};
@@ -103,6 +104,7 @@ fn main() -> Result<(), slint::PlatformError> {
     startup_probe::watch_first_frame(app.window());
 
     // Initialize UI properties
+    app.set_app_version(version::display().into());
     app.set_phone_name(settings.phone_name.clone().into());
     app.set_hotspot_name(settings.hotspot_name.clone().into());
     app.set_osc_path(settings.osc_file_path.clone().into());

@@ -6,6 +6,11 @@ fn main() {
     {
         let mut res = winresource::WindowsResource::new();
         res.set_icon("assets/icon.ico");
+        // FileVersion, ProductVersion and FileDescription already come from the
+        // Cargo keys via WindowsResource::new(). ProductName does not — it
+        // defaults to the crate name, and "gig-center" is not what the
+        // installer, the shortcut or the file-properties dialog should say.
+        res.set("ProductName", "Gig Control Center");
         if let Err(e) = res.compile() {
             eprintln!("Warning: Could not compile Windows resources: {e}");
         }
