@@ -76,9 +76,20 @@ jobs:
           $tag = "v$env:VERSION"
           if (git tag --list $tag) { throw "$tag already exists" }
 
+          # The first match and only the first. [package] is the first table
+          # in the file, but [dependencies.windows] carries a version line of
+          # exactly the same shape, and -replace would rewrite that one too —
+          # leaving cargo hunting for a windows crate at this app's version.
+          #
+          # No $ anchor: the checkout can have CRLF endings, and then the \r
+          # sits between the closing quote and the newline, so "$ matches
+          # nothing at all and the bump silently does nothing.
           $manifest = Get-Content Cargo.toml -Raw
-          $bumped = $manifest -replace '(?m)^version = "[^"]+"$', "version = ""$env:VERSION"""
-          if ($bumped -eq $manifest) { throw "Could not find the version line in Cargo.toml" }
+          $versionLine = [regex]'(?m)^version = "[^"]+"'
+          if ($versionLine.Matches($manifest).Count -eq 0) {
+            throw "No version line in Cargo.toml"
+          }
+          $bumped = $versionLine.Replace($manifest, "version = ""$env:VERSION""", 1)
           Set-Content Cargo.toml $bumped -NoNewline
 
           # --workspace keeps this to the package's own entry: it syncs the
@@ -86,12 +97,28 @@ jobs:
           cargo update --workspace
           if ($LASTEXITCODE -ne 0) { throw "cargo update failed" }
 
+          # Ask cargo what it reads now, rather than trusting the regex.
+          $pkg = (cargo metadata --no-deps --format-version 1 | ConvertFrom-Json).packages |
+            Where-Object { $_.name -eq "gig-center" }
+          if ($pkg.version -ne $env:VERSION) {
+            throw "After the edit cargo reads $($pkg.version), not $env:VERSION"
+          }
+
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add Cargo.toml Cargo.lock
-          git commit -m "release $tag"
+
+          # Nothing staged means the manifest already said this — the first
+          # release after a hand bump, or a re-run of one that failed further
+          # on. The commit is skipped; the tag still has to be made.
+          if (git diff --cached --name-only) {
+            git commit -m "release $tag"
+            git push origin main
+          } else {
+            Write-Host "Cargo.toml already reads $env:VERSION; tagging the commit as it stands."
+          }
+
           git tag $tag
-          git push origin main
           git push origin $tag
 
           "version=$env:VERSION" >> $env:GITHUB_OUTPUT
@@ -142,6 +169,8 @@ jobs:
           TAGGED: ${{ steps.resolve.outputs.version }}
         run: |
           $ErrorActionPreference = "Stop"
+          # First match again: [dependencies.windows] has a version line of
+          # the same shape, and [package] is the table above it.
           $line = Select-String -Path Cargo.toml -Pattern '^version = "([^"]+)"' | Select-Object -First 1
           if (-not $line) { throw "No version line in Cargo.toml" }
           $manifest = $line.Matches.Groups[1].Value
@@ -321,10 +350,9 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add bucket/gig-center.json
-          git diff --cached --quiet
-          if ($LASTEXITCODE -eq 0) {
-            Write-Host "Manifest already describes $env:VERSION."
-          } else {
+          if (git diff --cached --name-only) {
             git commit -m "gig-center: $env:VERSION"
             git push
+          } else {
+            Write-Host "Manifest already describes $env:VERSION."
           }
