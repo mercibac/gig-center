@@ -211,7 +211,7 @@ Details shows the same number, put there by `winresource` in `build.rs`.
 ## Packaging
 
 ```
-target/release/gig-center.exe                      cargo release build, ~11 MB
+target/release/gig-center.exe                      cargo release build, ~12 MB
 target/release/rust/Gig Control Center.exe         the shipped copy, by hand
 dist/Gig-Control-Center-v<version>-installer.exe   ISCC packaging/gig-center.iss
 ```

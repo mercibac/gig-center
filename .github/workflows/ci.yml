@@ -33,7 +33,7 @@ jobs:
     # further rather than repeating it.
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # Pinned, for the same reason slint is pinned in Cargo.toml:
       # `stable` moves, and a clippy that gains a lint overnight turns a green
@@ -73,7 +73,7 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # Same pin as the job above — the shipped binary should not be built by
       # whichever compiler happened to be stable that morning.
