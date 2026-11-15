@@ -15,6 +15,34 @@ beside it.
 > clone keeps the full history, so the Python side is still there to read.
 > Comments here that mention "the Python prototype" are pointing at it.
 
+## Installing
+
+Three ways, all from the [releases page](https://github.com/mercibac/gig-center/releases).
+
+**Scoop** — the one that keeps itself current:
+
+```bash
+scoop bucket add merbac https://github.com/mercibac/scoop-bucket
+```
+
+```bash
+scoop install gig-center
+```
+
+`scoop update gig-center` from then on. Settings survive an update: Scoop
+installs each version into its own directory, and the manifest persists
+`settings.json` outside it.
+
+**Installer** — `Gig-Control-Center-v<version>-installer.exe`. Installs for the
+current user only, into `%LOCALAPPDATA%\Programs\Gig Control Center`, so it
+never asks for administrator rights. Start-menu entry and an uninstaller.
+
+**Portable** — `Gig-Control-Center-v<version>-portable.exe`. One file: put it
+wherever you like and run it, and it keeps `settings.json` beside itself.
+
+None of the downloads are code-signed, so SmartScreen warns the first time a
+new version runs — **More info → Run anyway**.
+
 ## Structure
 
 ```
@@ -24,7 +52,8 @@ gig-center/
 │   └── splash.slint         The splash screen, re-exported through app.slint
 ├── assets/                  Images: window/exe icons, the splash art, and the
 │                            screen-match templates the automation clicks on
-├── settings.json            Runtime config: phone name, hotspot name, OSC preset path
+├── settings.json            Runtime config, written beside the exe at runtime
+│                            and git-ignored — a clone has none
 │
 ├── build.rs                 Compiles ui/app.slint, embeds assets/icon.ico,
 │                            pre-scales the window icon
@@ -34,6 +63,7 @@ gig-center/
 │   ├── assets.rs            The screen-match templates, compiled into the binary
 │   ├── splash_art.rs        The splash artwork, compiled into the binary
 │   ├── utils.rs             resource_path, volume control, timing
+│   ├── version.rs           The version string the window shows
 │   ├── settings.rs          Load/save settings.json
 │   ├── console.rs           Thread-safe log buffer feeding the on-screen console
 │   ├── gig_launcher.rs      The LAUNCH GIG RIG sequence
@@ -50,8 +80,16 @@ gig-center/
 │   └── app_icon.rs, first_paint.rs, startup_probe.rs
 │                            Window icon, first-frame cloaking, startup instrumentation
 │
+├── packaging/
+│   └── gig-center.iss       Inno Setup script, compiled on every tag
+├── .github/workflows/
+│   ├── ci.yml               Lint, test and release-build gate
+│   └── release.yml          Tag → portable exe, installer, release, Scoop
+│
 ├── Cargo.toml, Cargo.lock   Rust manifest (must stay at the root)
-├── cmds.md                  The build command
+├── LICENSE                  MIT
+├── cmds.md                  The build and packaging commands
+├── dist/                    Installer output, git-ignored
 └── target/                  All build output, git-ignored
     └── release/rust/Gig Control Center.exe
 ```
@@ -97,38 +135,118 @@ hold it up. It is also what covers the parts of the tree no unit test reaches:
 missing. Those two used to be checked by a test on the Python side; the build
 does it now.
 
-Both jobs carry a generous `timeout-minutes`, because a cold cache is expensive
-here: clippy and the test build each compile the dependency graph in full, and
-`[profile.dev.package."*"]` puts every one of those at `opt-level = 3`. A cold
-Rust job has been measured at 59m11s, against minutes once a cache exists —
-that gap is what the 90 is headroom for, not a target. `cache-on-failure` is on
-for the same reason: rust-cache saves on success only by default, so a job that
-times out writes no cache and the next run starts just as cold, which is a hole
-it cannot climb out of on its own.
+The Rust job carries a 90-minute `timeout-minutes`, because it is expensive
+however it runs: clippy and the test build each compile the dependency graph in
+full, and `[profile.dev.package."*"]` puts every one of those at `opt-level = 3`.
+Measured on this workflow, it takes 59m11s from cold and 43m27s with a warm
+cache, so the cache saves about a quarter of the time rather than most of it.
+The 90 is therefore roughly double the warm case, not slack for a rare cold run.
+The release build is cheap by comparison: 6m1s against its 30-minute limit.
+
+`cache-on-failure` is on because rust-cache saves on success only by default, so
+a job that times out writes no cache and the next run starts just as cold, which
+is a hole it cannot climb out of on its own.
+
+Merged pull-request branches delete themselves. That is the repository's
+`delete_branch_on_merge` setting rather than anything in this workflow, so there
+is nothing in here to find when you go looking for where it happens.
 
 The exe reads `settings.json` from the working directory only when it sits
 directly in `target/debug` or `target/release`, which is what `cargo run` gives
 it — anywhere else, the shipped copy in `release/rust/` included, it keeps its
 settings beside the exe.
 
+`.github/workflows/release.yml` is the other workflow, and it runs on tags
+rather than on pushes and pull requests — see [Releasing](#releasing). It is
+the only thing here that holds `contents: write`; `ci.yml` stays on
+`contents: read` because a gate has no business writing to the repository.
+
+## Releasing
+
+A release is one button. **Actions → Release → Run workflow**, type the new
+version (`1.1.0`, no `v`), and `.github/workflows/release.yml` does the rest:
+bumps `Cargo.toml`, commits that to `main`, pushes the tag, builds, packages
+and publishes.
+
+What lands on the [releases page](https://github.com/mercibac/gig-center/releases):
+
+| Asset | What it is |
+| --- | --- |
+| `Gig-Control-Center-v1.0.0-portable.exe` | The exe on its own — copy it anywhere and run it |
+| `Gig-Control-Center-v1.0.0-installer.exe` | Per-user installer, Start-menu entry, uninstaller |
+| Source code (zip, tar.gz) | Attached by GitHub itself, nothing in the workflow does it |
+
+Hyphens rather than the spaces in the app's own shipped name, because GitHub
+rewrites spaces and runs of punctuation in an asset's name into dots — and the
+Scoop manifest has to point at a URL somebody actually chose.
+
+Tagging by hand does the same thing, for when the laptop is closer than the
+browser. The workflow takes a `v*.*.*` tag push as well:
+
+```bash
+git tag v1.1.0 && git push origin v1.1.0
+```
+
+The tag and `Cargo.toml` have to agree, and the build job fails loudly when
+they do not: the label in the window reads `Cargo.toml`, so a release that
+disagrees with it advertises the wrong number.
+
+Both ways are one workflow rather than two because a tag pushed with
+`GITHUB_TOKEN` does not trigger another workflow — GitHub's own recursion
+guard. Splitting them would need a personal access token purely to make
+tagging fire the build.
+
+The release build deliberately does not re-run clippy and the tests. That gate
+costs 43-59 minutes and has already run on `main`, since a tag is cut from a
+commit that passed it; repeating it would roughly quadruple the time to ship
+without saying anything new.
+
+### Where the version lives
+
+`Cargo.toml` is the only place it is written. `src/version.rs` turns that into
+what the bottom of the window shows, dropping a `.0` patch so `1.0.0` reads as
+`V1.0` — a release carrying a real patch keeps it. The exe's Properties →
+Details shows the same number, put there by `winresource` in `build.rs`.
+
 ## Packaging
 
 ```
-target/release/rust/Gig Control Center.exe      cargo release build, ~11 MB
+target/release/gig-center.exe                      cargo release build, ~11 MB
+target/release/rust/Gig Control Center.exe         the shipped copy, by hand
+dist/Gig-Control-Center-v<version>-installer.exe   ISCC packaging/gig-center.iss
 ```
 
-The exact command is in [cmds.md](cmds.md). In short: `cargo build --release`,
-then copy the binary into `release/rust/` under the shipped name. Cargo cannot do
-either step itself — a bin target's name becomes the crate name, and rustc
-rejects spaces in it. The build is self-contained, so the exe needs nothing
-beside it.
+The commands are in [cmds.md](cmds.md). The build is self-contained — the UI,
+the icons and the screen-match templates are all compiled in — so the exe
+needs nothing beside it and the installer ships exactly one file.
+
+`packaging/gig-center.iss` installs **per user**, into
+`%LOCALAPPDATA%\Programs\Gig Control Center`, which is not a cosmetic choice.
+The app writes `settings.json` next to its own exe and nothing in it ever
+elevates, so a machine-wide install under `Program Files` would leave every
+save failing — silently, because `#![windows_subsystem = "windows"]` means
+there is no console for the warning to reach. The install directory must also
+not be named `debug` or `release`, for the reason just above.
+
+`settings.json` is not shipped and not removed on uninstall. A fresh install
+starts from the built-in defaults, and an uninstall leaves the user's own
+configuration where it is.
 
 `cargo clean` empties `target/` entirely.
 
+
 ## Settings
 
-`settings.json` sits at the repository root and is read fresh on every launch, so
-edits made in the app's settings dialog take effect immediately:
+`settings.json` lives beside the exe and is read fresh on every launch, so
+edits made in the app's settings dialog take effect immediately. It is **not**
+in the repository: a clone has none, and the app writes one from the built-in
+defaults on the first save, exactly as a fresh install does. It was tracked
+once, which shipped one machine's device names and preset paths to everyone
+who cloned.
+
+`cargo run` is the one exception. The exe then sits in `target/debug` or
+`target/release`, which `config_dir()` reads as a dev run, so it takes the
+working directory instead — the repository root, in practice.
 
 | Key | Meaning |
 | --- | --- |

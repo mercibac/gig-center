@@ -1,0 +1,330 @@
+name: Release
+
+# Cuts a release: the portable exe, an installer, the source archives GitHub
+# attaches on its own, and the Scoop manifest.
+#
+# Two ways in, one path out.
+#   workflow_dispatch — type the new version, press Run. The prepare job bumps
+#     Cargo.toml, commits it to main and pushes the tag, and build carries on
+#     in the same run.
+#   push of a v*.*.* tag — for when the tag is made by hand from a laptop.
+#
+# Those are one workflow rather than two on purpose. A tag pushed with
+# GITHUB_TOKEN does not trigger another workflow — GitHub's own recursion
+# guard — so a separate "prepare" workflow would need a personal access token
+# just to make tagging fire the build. Keeping both jobs in one run sidesteps
+# that, and the tag trigger still covers the hand-made case.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, without the v — e.g. 1.1.0"
+        required: true
+        type: string
+  push:
+    tags: ["v*.*.*"]
+
+# ci.yml runs on contents: read. Creating a release, pushing the bump and
+# pushing the tag all need write, which is the deliberate difference.
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # Only on the dispatch path. On a tag push the tag already exists and this
+  # is skipped; build handles both cases.
+  #
+  # On Windows like everything else here. It only rewrites a TOML and pushes,
+  # so a Linux runner would start quicker, but this repository has one runner
+  # OS by design and one exception is how that stops being true.
+  prepare:
+    name: Bump and tag
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: windows-latest
+    timeout-minutes: 10
+    outputs:
+      version: ${{ steps.bump.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          # The tag is pushed from here, so this needs a real clone rather
+          # than the shallow one checkout takes by default.
+          fetch-depth: 0
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.97.1"
+
+      - name: Bump, commit and tag
+        id: bump
+        shell: pwsh
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          # Cargo wants three components. Catching a typo here costs ten
+          # seconds; catching it later costs a bad tag that has to be deleted
+          # from two places.
+          if ($env:VERSION -notmatch '^\d+\.\d+\.\d+$') {
+            throw "Version must be MAJOR.MINOR.PATCH, got '$env:VERSION'"
+          }
+          $tag = "v$env:VERSION"
+          if (git tag --list $tag) { throw "$tag already exists" }
+
+          $manifest = Get-Content Cargo.toml -Raw
+          $bumped = $manifest -replace '(?m)^version = "[^"]+"$', "version = ""$env:VERSION"""
+          if ($bumped -eq $manifest) { throw "Could not find the version line in Cargo.toml" }
+          Set-Content Cargo.toml $bumped -NoNewline
+
+          # --workspace keeps this to the package's own entry: it syncs the
+          # lockfile without re-resolving a single dependency.
+          cargo update --workspace
+          if ($LASTEXITCODE -ne 0) { throw "cargo update failed" }
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Cargo.toml Cargo.lock
+          git commit -m "release $tag"
+          git tag $tag
+          git push origin main
+          git push origin $tag
+
+          "version=$env:VERSION" >> $env:GITHUB_OUTPUT
+
+  build:
+    name: Build and publish
+    needs: [prepare]
+    # Runs on both paths: after prepare on a dispatch, and on its own when a
+    # tag was pushed by hand and prepare was skipped.
+    if: always() && (needs.prepare.result == 'success' || needs.prepare.result == 'skipped')
+    runs-on: windows-latest
+    # The release build measured 6m1s warm against ci.yml's 30-minute limit,
+    # and the installer adds about a minute on top. 45 is headroom for a cold
+    # cache rather than slack for the warm case — this repository has been
+    # bitten before by a timeout that left no cache behind to climb out of.
+    timeout-minutes: 45
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+      tag: ${{ steps.resolve.outputs.tag }}
+    steps:
+      - name: Work out which version this is
+        id: resolve
+        shell: pwsh
+        env:
+          EVENT: ${{ github.event_name }}
+          FROM_PREPARE: ${{ needs.prepare.outputs.version }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          if ($env:EVENT -eq "workflow_dispatch") {
+            $version = $env:FROM_PREPARE
+          } else {
+            $version = $env:REF_NAME -replace '^v', ''
+          }
+          if ($version -notmatch '^\d+\.\d+\.\d+$') {
+            throw "Could not read a version out of this run, got '$version'"
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "tag=v$version" >> $env:GITHUB_OUTPUT
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.resolve.outputs.tag }}
+
+      - name: Check the tag agrees with Cargo.toml
+        shell: pwsh
+        env:
+          TAGGED: ${{ steps.resolve.outputs.version }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $line = Select-String -Path Cargo.toml -Pattern '^version = "([^"]+)"' | Select-Object -First 1
+          if (-not $line) { throw "No version line in Cargo.toml" }
+          $manifest = $line.Matches.Groups[1].Value
+          if ($manifest -ne $env:TAGGED) {
+            throw "Tag says $env:TAGGED, Cargo.toml says $manifest. The label in the window reads Cargo.toml, so this would ship the wrong number on the release."
+          }
+          Write-Host "Both say $manifest."
+
+      # Same pin as ci.yml. The shipped binary should not be built by whichever
+      # compiler happened to be stable that morning.
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.97.1"
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          # Its own entry, like ci.yml's release job, so the two profiles do
+          # not thrash one cache.
+          key: release
+          cache-on-failure: true
+
+      # Deliberately no clippy and no tests here. That gate costs 43-59
+      # minutes and has already run on main — a tag is cut from a commit that
+      # passed it. Repeating it would roughly quadruple the time to ship
+      # without saying anything new.
+      - name: Build
+        run: cargo build --release
+
+      - name: Name the portable exe
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.resolve.outputs.version }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          New-Item -ItemType Directory -Force dist | Out-Null
+          # Hyphens, not the spaces the app's own shipped name uses: GitHub
+          # rewrites spaces and runs of punctuation in a release asset's name
+          # into dots, which would leave the Scoop manifest pointing at a URL
+          # nobody chose.
+          Copy-Item target/release/gig-center.exe "dist/Gig-Control-Center-v$env:VERSION-portable.exe"
+
+      - name: Build the installer
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.resolve.outputs.version }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          # Preinstalled on the windows-2025 image (InnoSetup 6.7.1 at the time
+          # of writing). It is slated to leave a future image, so fall back
+          # rather than break on the morning it does.
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            Write-Host "::notice::ISCC is not on this runner image; installing it."
+            choco install innosetup -y --no-progress
+            $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          }
+          if (-not (Test-Path $iscc)) { throw "Inno Setup is not available on this runner" }
+
+          & $iscc "/DMyAppVersion=$env:VERSION" packaging/gig-center.iss
+          if ($LASTEXITCODE -ne 0) { throw "ISCC failed with $LASTEXITCODE" }
+
+      - name: Check both artefacts are there
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.resolve.outputs.version }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $names = @(
+            "Gig-Control-Center-v$env:VERSION-portable.exe",
+            "Gig-Control-Center-v$env:VERSION-installer.exe"
+          )
+          foreach ($name in $names) {
+            $file = Get-Item "dist/$name" -ErrorAction SilentlyContinue
+            if (-not $file) { throw "dist/$name was not produced" }
+            $hash = (Get-FileHash $file.FullName -Algorithm SHA256).Hash
+            Write-Host ("{0}  {1:N1} MB  sha256 {2}" -f $name, ($file.Length / 1MB), $hash)
+          }
+
+      # GitHub attaches the source zip and tar.gz to every release by itself,
+      # so "source code on the release" needs nothing here.
+      - name: Publish the release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.resolve.outputs.tag }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $assets = Get-ChildItem dist/*.exe | ForEach-Object { $_.FullName }
+          gh release create $env:TAG --title "Gig Control Center $env:TAG" --generate-notes @assets
+          if ($LASTEXITCODE -ne 0) { throw "gh release create failed" }
+
+  scoop:
+    name: Update the Scoop bucket
+    needs: build
+    if: needs.build.result == 'success'
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      # Secrets cannot be read in a job-level if, so the gate is a step.
+      # Until the bucket repository and its token exist this skips with a
+      # notice and leaves the release itself green.
+      - name: Is the bucket token set?
+        id: gate
+        shell: pwsh
+        env:
+          TOKEN: ${{ secrets.SCOOP_BUCKET_TOKEN }}
+        run: |
+          if ([string]::IsNullOrEmpty($env:TOKEN)) {
+            Write-Host "::notice::SCOOP_BUCKET_TOKEN is not set, so the Scoop manifest was not updated. The release itself is unaffected."
+            "ok=false" >> $env:GITHUB_OUTPUT
+          } else {
+            "ok=true" >> $env:GITHUB_OUTPUT
+          }
+
+      - name: Fetch the published exe and hash it
+        if: steps.gate.outputs.ok == 'true'
+        id: hash
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+          REPO: ${{ github.repository }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $url = "https://github.com/$env:REPO/releases/download/v$env:VERSION/Gig-Control-Center-v$env:VERSION-portable.exe"
+          # Hashed from what the release actually serves rather than from the
+          # local build, so the manifest can only ever describe the file a
+          # user would really download.
+          Invoke-WebRequest -Uri $url -OutFile portable.exe
+          $hash = (Get-FileHash portable.exe -Algorithm SHA256).Hash.ToLower()
+          "sha256=$hash" >> $env:GITHUB_OUTPUT
+
+      - name: Check out the bucket
+        if: steps.gate.outputs.ok == 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: mercibac/scoop-bucket
+          token: ${{ secrets.SCOOP_BUCKET_TOKEN }}
+          path: bucket-repo
+
+      - name: Write the manifest and push
+        if: steps.gate.outputs.ok == 'true'
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+          REPO: ${{ github.repository }}
+          SHA256: ${{ steps.hash.outputs.sha256 }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $site = "https://github.com/$env:REPO"
+          $asset = "Gig-Control-Center-v$env:VERSION-portable.exe"
+
+          # The #/ fragment renames the download, so the shortcut target stays
+          # the same string from one version to the next.
+          $manifest = [ordered]@{
+            version     = $env:VERSION
+            description = "Live performance setup automation for Windows"
+            homepage    = $site
+            license     = "MIT"
+            url         = "$site/releases/download/v$env:VERSION/$asset#/GigControlCenter.exe"
+            hash        = $env:SHA256
+            bin         = "GigControlCenter.exe"
+            shortcuts   = @(, @("GigControlCenter.exe", "Gig Control Center"))
+            # Scoop installs each version into its own directory, so without
+            # this a scoop update would leave the user's devices and preset
+            # paths behind in the old one.
+            persist     = @("settings.json")
+            checkver    = "github"
+            autoupdate  = [ordered]@{
+              url = "$site/releases/download/v`$version/Gig-Control-Center-v`$version-portable.exe#/GigControlCenter.exe"
+            }
+          }
+
+          New-Item -ItemType Directory -Force bucket-repo/bucket | Out-Null
+          $manifest | ConvertTo-Json -Depth 5 | Set-Content bucket-repo/bucket/gig-center.json
+
+          Set-Location bucket-repo
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add bucket/gig-center.json
+          git diff --cached --quiet
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "Manifest already describes $env:VERSION."
+          } else {
+            git commit -m "gig-center: $env:VERSION"
+            git push
+          }

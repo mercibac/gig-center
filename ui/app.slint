@@ -276,6 +276,11 @@ export component MainWindow inherits Window {
     in-out property <string> executable-gig-performer: "";
     in-out property <string> executable-open-stage-control: "";
 
+    // --- Version ---
+    // Pushed from Rust so the label can never disagree with Cargo.toml.
+    // See src/version.rs for why it reads V1.0 and not V1.0.0.
+    in property <string> app-version;
+
     // --- Callbacks ---
     callback launch-clicked();
     callback clear-clicked();
@@ -409,33 +414,91 @@ export component MainWindow inherits Window {
         }
 
         // 3. Bottom Row — audio activity left, Settings right, on the same
-        // grid as the console panel above.
-        HorizontalLayout {
-            HorizontalLayout {
-                horizontal-stretch: 1;
-                alignment: start;
-                spacing: 8px;
+        // grid as the console panel above, with the version centred over them.
+        //
+        // The version is overlaid rather than sat between the two. As a third
+        // child of the row it centres in whatever space the other two leave
+        // over, and since the Settings button is wider than the AUDIO group
+        // that puts it ~27px left of the window's centre line. Drawn on top of
+        // the full-width row it centres on the window itself, and stays there
+        // as either side changes width.
+        Rectangle {
+            height: 50px;
 
-                MidiLed {
-                    lit: root.audio-active;
-                    y: (parent.height - self.height) / 2;
+            HorizontalLayout {
+                HorizontalLayout {
+                    horizontal-stretch: 1;
+                    alignment: start;
+                    spacing: 8px;
+
+                    MidiLed {
+                        lit: root.audio-active;
+                        y: (parent.height - self.height) / 2;
+                    }
+                    Text {
+                        text: "AUDIO";
+                        color: #d4d4d4;
+                        font-size: 14px;
+                        vertical-alignment: center;
+                    }
                 }
-                Text {
-                    text: "AUDIO";
-                    color: #d4d4d4;
-                    font-size: 14px;
-                    vertical-alignment: center;
+
+                DarkButton {
+                    btn-text: "⚙ Settings";
+                    height: 50px;
+                    min-width: 130px;
+                    btn-enabled: root.buttons-enabled && !root.show-settings;
+                    clicked => {
+                        root.settings-opened();
+                        root.show-settings = true;
+                    }
                 }
             }
 
-            DarkButton {
-                btn-text: "⚙ Settings";
-                height: 50px;
-                min-width: 130px;
-                btn-enabled: root.buttons-enabled && !root.show-settings;
-                clicked => {
-                    root.settings-opened();
-                    root.show-settings = true;
+            // Version and author. Two Text elements rather than one styled
+            // run, because the software renderer this app selects flattens
+            // StyledText back to plain text — a per-run link colour would
+            // simply not draw. The underline is a Rectangle for a related
+            // reason: Slint has no text-decoration. Only the word carries a
+            // TouchArea, so the Settings button underneath still takes its
+            // own clicks through this overlay.
+            HorizontalLayout {
+                alignment: center;
+                spacing: 0px;
+
+                Text {
+                    text: root.app-version + " by ";
+                    color: #9a9a9a;
+                    font-size: 12px;
+                    vertical-alignment: center;
+                }
+
+                Rectangle {
+                    width: author.preferred-width;
+                    height: author.preferred-height + 2px;
+                    y: (parent.height - self.height) / 2;
+
+                    author := Text {
+                        text: "Merbac";
+                        color: touch.has-hover ? #3d9bdc : #007acc;
+                        font-size: 12px;
+                        y: 0;
+                        animate color { duration: 120ms; }
+                    }
+
+                    Rectangle {
+                        y: author.preferred-height;
+                        height: 1px;
+                        background: author.color;
+                        animate background { duration: 120ms; }
+                    }
+
+                    touch := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => {
+                            Platform.open-url("https://github.com/mercibac/gig-center");
+                        }
+                    }
                 }
             }
         }
