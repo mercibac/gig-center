@@ -1,6 +1,6 @@
 [package]
 name = "gig-center"
-version = "1.0.0"
+version = "1.0.1"
 edition = "2021"
 description = "Gig Control Center - Live performance setup automation"
 authors = ["Merbac"]
