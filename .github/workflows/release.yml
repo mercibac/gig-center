@@ -337,6 +337,16 @@ jobs:
             # this a scoop update would leave the user's devices and preset
             # paths behind in the old one.
             persist     = @("settings.json")
+            # persist alone is not enough. When neither the persist store nor
+            # the package holds the named path, Scoop cannot tell a file from
+            # a directory and creates a directory — its own source says so and
+            # says to use pre_install. The app ships as one exe and carries no
+            # settings.json, so that is exactly the case here: the first
+            # release made a settings.json *directory*, every save failed with
+            # access denied, and because the app is windows_subsystem=windows
+            # there was no console for the error to reach. Creating the file
+            # first makes Scoop hard-link it instead.
+            pre_install = 'if (!(Test-Path "$persist_dir\settings.json")) { New-Item -ItemType File "$dir\settings.json" -Force | Out-Null }'
             checkver    = "github"
             autoupdate  = [ordered]@{
               url = "$site/releases/download/v`$version/Gig-Control-Center-v`$version-portable.exe#/GigControlCenter.exe"
