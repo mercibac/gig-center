@@ -6,11 +6,17 @@ fn main() {
     {
         let mut res = winresource::WindowsResource::new();
         res.set_icon("assets/icon.ico");
-        // FileVersion, ProductVersion and FileDescription already come from the
-        // Cargo keys via WindowsResource::new(). ProductName does not — it
-        // defaults to the crate name, and "gig-center" is not what the
-        // installer, the shortcut or the file-properties dialog should say.
+        // FileVersion and ProductVersion come from CARGO_PKG_VERSION on their
+        // own. The strings a person actually reads do not: ProductName and
+        // FileDescription both default to the crate name, so the v1.0.0 exe
+        // called itself "gig-center" in Task Manager and in the file
+        // properties dialog, and CompanyName was blank. FileDescription is
+        // the one Task Manager shows, which is why it is worth setting rather
+        // than leaving to the crate name.
         res.set("ProductName", "Gig Control Center");
+        res.set("FileDescription", "Gig Control Center");
+        res.set("CompanyName", "Merbac");
+        res.set("LegalCopyright", "Copyright (c) 2026 Merbac. MIT licensed.");
         if let Err(e) = res.compile() {
             eprintln!("Warning: Could not compile Windows resources: {e}");
         }

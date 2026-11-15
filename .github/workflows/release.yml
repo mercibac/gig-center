@@ -48,7 +48,7 @@ jobs:
     outputs:
       version: ${{ steps.bump.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: main
           # The tag is pushed from here, so this needs a real clone rather
@@ -159,7 +159,7 @@ jobs:
           "version=$version" >> $env:GITHUB_OUTPUT
           "tag=v$version" >> $env:GITHUB_OUTPUT
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ steps.resolve.outputs.tag }}
 
@@ -304,7 +304,7 @@ jobs:
 
       - name: Check out the bucket
         if: steps.gate.outputs.ok == 'true'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: mercibac/scoop-bucket
           token: ${{ secrets.SCOOP_BUCKET_TOKEN }}
