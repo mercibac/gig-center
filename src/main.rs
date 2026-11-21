@@ -113,6 +113,7 @@ fn main() -> Result<(), slint::PlatformError> {
     seed_defender_images(&app, &settings.defender_images);
     seed_executables(&app, &settings.executables);
     seed_window_names(&app, &settings.window_names);
+    seed_snap_ratio(&app, &settings.snap_ratio);
     app.set_console_text("System initialized. Awaiting command...\n".into());
 
     // Shared with every UI callback below. Slint runs them all on this
@@ -243,6 +244,10 @@ fn main() -> Result<(), slint::PlatformError> {
             .upgrade()
             .map(read_window_names)
             .unwrap_or_default();
+        let chosen_snap_ratio = app_weak_save
+            .upgrade()
+            .map(|app| app.get_snap_ratio().to_string())
+            .unwrap_or_default();
 
         let new_settings = settings::merge_from_form(
             stored,
@@ -255,6 +260,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 defender_images: chosen_images,
                 executables: chosen_programs,
                 window_names: chosen_window_names,
+                snap_ratio: &chosen_snap_ratio,
             },
         );
 
@@ -270,6 +276,7 @@ fn main() -> Result<(), slint::PlatformError> {
             seed_defender_images(&app, &new_settings.defender_images);
             seed_executables(&app, &new_settings.executables);
             seed_window_names(&app, &new_settings.window_names);
+            seed_snap_ratio(&app, &new_settings.snap_ratio);
 
             // Follow the devices that were just saved. Without this the meter
             // and the listener stay on whatever they opened last, so a new
@@ -302,6 +309,7 @@ fn main() -> Result<(), slint::PlatformError> {
             seed_defender_images(&app, &stored.defender_images);
             seed_executables(&app, &stored.executables);
             seed_window_names(&app, &stored.window_names);
+            seed_snap_ratio(&app, &stored.snap_ratio);
         }
     });
 
@@ -345,9 +353,7 @@ fn main() -> Result<(), slint::PlatformError> {
         let picked = picked.to_string_lossy().to_string();
 
         match slot.as_str() {
-            "deactivation-state" => {
-                app.set_defender_deactivation_state_image(picked.clone().into())
-            }
+            "turn-on" => app.set_defender_turn_on_image(picked.clone().into()),
             "activation-state" => app.set_defender_activation_state_image(picked.clone().into()),
             "realtime-label" => app.set_defender_realtime_label_image(picked.clone().into()),
             "manage-settings" => app.set_defender_manage_settings_image(picked.clone().into()),
@@ -511,7 +517,7 @@ Windows Defender step: {}",
 /// those is what makes CANCEL discard an edit, since these fields are two-way
 /// bound and so are written the moment they are touched.
 fn seed_defender_images(app: &MainWindow, images: &DefenderImages) {
-    app.set_defender_deactivation_state_image(images.deactivation_state.clone().into());
+    app.set_defender_turn_on_image(images.turn_on.clone().into());
     app.set_defender_activation_state_image(images.activation_state.clone().into());
     app.set_defender_realtime_label_image(images.realtime_label.clone().into());
     app.set_defender_manage_settings_image(images.manage_settings.clone().into());
@@ -520,7 +526,7 @@ fn seed_defender_images(app: &MainWindow, images: &DefenderImages) {
 /// Read the Advanced fields back out, for the save.
 fn read_defender_images(app: MainWindow) -> DefenderImages {
     DefenderImages {
-        deactivation_state: app.get_defender_deactivation_state_image().to_string(),
+        turn_on: app.get_defender_turn_on_image().to_string(),
         activation_state: app.get_defender_activation_state_image().to_string(),
         realtime_label: app.get_defender_realtime_label_image().to_string(),
         manage_settings: app.get_defender_manage_settings_image().to_string(),
@@ -563,10 +569,18 @@ fn read_window_names(app: MainWindow) -> WindowNames {
     }
 }
 
+/// Push the stored snap ratio into its Advanced field, like the groups above.
+///
+/// Read back inline in the save callback rather than through a `read_` twin:
+/// one property holding one string is not a struct worth naming.
+fn seed_snap_ratio(app: &MainWindow, ratio: &str) {
+    app.set_snap_ratio(ratio.into());
+}
+
 /// The path currently in one Advanced field, named by the slot the UI passes.
 fn path_for(app: &MainWindow, slot: &str) -> String {
     match slot {
-        "deactivation-state" => app.get_defender_deactivation_state_image().to_string(),
+        "turn-on" => app.get_defender_turn_on_image().to_string(),
         "activation-state" => app.get_defender_activation_state_image().to_string(),
         "realtime-label" => app.get_defender_realtime_label_image().to_string(),
         "manage-settings" => app.get_defender_manage_settings_image().to_string(),
@@ -608,7 +622,7 @@ fn report_executables(programs: &Executables) {
 /// out at the gig is the failure the embedded images were introduced to stop.
 fn report_defender_images(images: &DefenderImages) {
     let chosen = [
-        ("Deactivation state", &images.deactivation_state),
+        ("Turn on", &images.turn_on),
         ("Activation state", &images.activation_state),
         ("Realtime label", &images.realtime_label),
         ("Manage settings", &images.manage_settings),

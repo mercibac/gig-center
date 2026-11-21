@@ -244,7 +244,7 @@ pub fn main(settings: Settings) {
             // Gig Performer only puts the gig file's name in its title once
             // loading has finished, and until then there is nothing to match.
             thread::sleep(Duration::from_secs(30));
-            crate::snap::snap_gig_windows(&settings.window_names);
+            crate::snap::snap_gig_windows(&settings.window_names, &settings.snap_ratio);
         } else {
             console_log!("\nPlease check your phone hotspot and try again.");
         }

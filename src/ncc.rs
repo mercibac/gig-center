@@ -11,11 +11,11 @@
 //! The first Rust port called `imageproc::match_template`, whose `score_at`
 //! re-reads the entire template — plus the window's sum of squares — at *every*
 //! output position. That is `O(screen_area × template_area)`. For a 1536×864
-//! screen and the 245×237 `defender_deactivation_state.png` that is
-//! 1292 × 628 = 811 376 positions × 58 065 template pixels × 2 accumulators
-//! ≈ **94 billion** floating-point operations for a single lookup, and
-//! `switch_defender` performs three lookups per call. That, not any of the
-//! deliberate `sleep`s, is why clicking an image took so long.
+//! screen and the 242×185 `defender_activation_state.png` that is
+//! 1295 × 680 = 880 600 positions × 44 770 template pixels × 2 accumulators
+//! ≈ **79 billion** floating-point operations for a single lookup, and
+//! `switch_defender` performs three of them on the way off. That, not any of
+//! the deliberate `sleep`s, is why clicking an image took so long.
 //!
 //! This module restores OpenCV's formulation:
 //!
@@ -458,7 +458,7 @@ mod tests {
     #[test]
     fn full_screen_search_is_fast() {
         let template = crate::assets::defender_template(
-            crate::assets::DefenderSlot::DeactivationState,
+            crate::assets::DefenderSlot::ActivationState,
             &Default::default(),
         )
         .to_luma8()
@@ -505,7 +505,7 @@ mod tests {
         use imageproc::template_matching::{match_template, MatchTemplateMethod};
 
         let template = crate::assets::defender_template(
-            crate::assets::DefenderSlot::DeactivationState,
+            crate::assets::DefenderSlot::ActivationState,
             &Default::default(),
         )
         .to_luma8()

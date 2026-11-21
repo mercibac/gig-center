@@ -271,7 +271,7 @@ export component MainWindow inherits Window {
     // The flip side of a two-way binding is that CANCEL no longer discards an
     // edit for free, so the backend re-seeds these when the modal opens.
     in-out property <bool> advanced-expanded: false;
-    in-out property <string> defender-deactivation-state-image: "";
+    in-out property <string> defender-turn-on-image: "";
     in-out property <string> defender-activation-state-image: "";
     in-out property <string> defender-realtime-label-image: "";
     in-out property <string> defender-manage-settings-image: "";
@@ -291,6 +291,12 @@ export component MainWindow inherits Window {
     in-out property <string> window-name-open-stage-control: "";
     in-out property <string> window-name-gig-performer: "";
 
+    // --- Advanced: how wide Open Stage Control is when the snap runs ---
+    // A percentage of the screen width, empty-means-default like the rest.
+    // Only one number because Gig Performer takes the remainder: a second
+    // field could be set to a pair that leaves a strip of desktop showing.
+    in-out property <string> snap-ratio: "";
+
     // --- Version ---
     // Pushed from Rust so the label can never disagree with Cargo.toml.
     // See src/version.rs for why it reads V1.0 and not V1.0.0.
@@ -303,13 +309,12 @@ export component MainWindow inherits Window {
     callback shutdown-toggled(bool);
     callback defender-toggled(bool);
     callback settings-opened();
-    // Takes the slot name — "deactivation-state", "activation-state",
-    // "realtime-label", "manage-settings", "gig-performer" or
-    // "open-stage-control" — and the backend writes the
-    // chosen path back into the matching property above, picking the file
-    // filter from the slot. One argument rather than six callbacks, and
-    // nothing to return: cancelling has to leave the field alone, which a
-    // returned empty string could not express.
+    // Takes the slot name — "turn-on", "activation-state", "realtime-label",
+    // "manage-settings", "gig-performer" or "open-stage-control" — and the
+    // backend writes the chosen path back into the matching property above,
+    // picking the file filter from the slot. One argument rather than six
+    // callbacks, and nothing to return: cancelling has to leave the field
+    // alone, which a returned empty string could not express.
     callback browse-for-path(string);
 
     // ==========================================
@@ -549,14 +554,15 @@ export component MainWindow inherits Window {
             // rows sat behind a scrollbar while a third of the window's height
             // went unused below the panel.
             //
-            // 1100px is measured against the content — ~930px of rows and
+            // 1240px is measured against the content — ~1075px of rows and
             // notes plus ~165px of title, padding and the button row — and it
             // stays a cap rather than a plain height, so a tall window does not
             // stretch the panel past its own content. A window shorter than
             // that still scrolls, which is what the ScrollView and its gutter
             // are for. It was 920px before the Window names group added a
-            // heading, two rows and a note.
-            height: min(root.advanced-expanded ? 1100px : 520px, parent.height - 32px);
+            // heading, two rows and a note, and 1100px before the Window split
+            // group added a heading, one row and another note.
+            height: min(root.advanced-expanded ? 1240px : 520px, parent.height - 32px);
             x: (parent.width - self.width) / 2;
             y: (parent.height - self.height) / 2;
 
@@ -708,10 +714,10 @@ export component MainWindow inherits Window {
                             }
 
                             PathRow {
-                                label: "Deactivation state image:";
+                                label: "Turn on button image:";
                                 placeholder: "Built-in image";
-                                path <=> root.defender-deactivation-state-image;
-                                browse => { root.browse-for-path("deactivation-state"); }
+                                path <=> root.defender-turn-on-image;
+                                browse => { root.browse-for-path("turn-on"); }
                             }
 
                             PathRow {
@@ -736,7 +742,7 @@ export component MainWindow inherits Window {
                             }
 
                             Text {
-                                text: "The two state images are named for what they show, so turning protection on looks for the deactivated card. The realtime label is not clicked: the click lands at a fixed offset below it, so crop a replacement like the original.";
+                                text: "Turning protection on is the one click on Turn on. Turning it off looks for the activation state card, then Manage settings, then clicks a fixed offset below the realtime label — that label is never clicked itself, so crop a replacement like the original.";
                                 color: #9a9a9a;
                                 font-size: 12px;
                                 wrap: word-wrap;
@@ -792,7 +798,28 @@ export component MainWindow inherits Window {
                             }
 
                             Text {
-                                text: "What LAUNCH looks for when it snaps the two windows into their halves of the screen. Matched as a case-insensitive part of the title bar, and the first visible window that matches wins — so the Gig Performer one is usually the name of the gig file, which is what it shows once the file has loaded.";
+                                text: "What LAUNCH looks for when it snaps the two windows into their shares of the screen. Matched as a case-insensitive part of the title bar, and the first visible window that matches wins — so the Gig Performer one is usually the name of the gig file, which is what it shows once the file has loaded.";
+                                color: #9a9a9a;
+                                font-size: 12px;
+                                wrap: word-wrap;
+                            }
+
+                            Text {
+                                text: "Window split";
+                                color: #d4d4d4;
+                                font-size: 13px;
+                                font-weight: 700;
+                            }
+
+                            PathRow {
+                                label: "Open Stage Control width:";
+                                placeholder: "29%";
+                                show-browse: false;
+                                path <=> root.snap-ratio;
+                            }
+
+                            Text {
+                                text: "How much of the screen width Open Stage Control gets when LAUNCH snaps the two windows. Gig Performer takes the rest, so this is the only number to set. Anything outside 10 to 90 is pulled back to the nearest end, and the console says which width it used.";
                                 color: #9a9a9a;
                                 font-size: 12px;
                                 wrap: word-wrap;
