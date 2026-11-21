@@ -1,22 +1,4 @@
-use std::path::PathBuf;
 use std::time::Instant;
-
-/// Get absolute path to a resource, works for dev and compiled exe.
-/// Checks exe directory first (release), then falls back to cwd (development).
-pub fn resource_path(relative_path: &str) -> PathBuf {
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            let candidate = dir.join(relative_path);
-            if candidate.exists() {
-                return candidate;
-            }
-        }
-    }
-
-    // Fallback to current working directory (development mode)
-    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    cwd.join(relative_path)
-}
 
 /// Set the system master volume to a given percentage (0–100).
 /// Uses Windows Core Audio COM API (IAudioEndpointVolume).

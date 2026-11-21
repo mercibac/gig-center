@@ -73,6 +73,39 @@ impl Executables {
     }
 }
 
+/// The window titles LAUNCH looks for when it snaps the two programs into their
+/// halves of the screen.
+///
+/// Not paths, unlike every other group here: each is matched as a
+/// case-insensitive part of a window's title bar. The Gig Performer one is
+/// therefore usually the gig file's name, which is what Gig Performer puts up
+/// there once the file has loaded — so renaming a gig file used to mean editing
+/// `snap.rs` and rebuilding.
+///
+/// An empty entry means the name compiled into the exe, the same rule the image
+/// and executable fields follow, so clearing a field is the way back to the
+/// original. An empty one must never reach the matcher, because `contains("")`
+/// is true of every window; [`crate::snap::window_name`] is the guard.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WindowNames {
+    /// The Open Stage Control window. Empty uses the built-in name.
+    #[serde(default)]
+    pub open_stage_control: String,
+    /// The Gig Performer window. Empty uses the built-in name.
+    #[serde(default)]
+    pub gig_performer: String,
+}
+
+impl WindowNames {
+    /// Trim both names, the way the text fields are trimmed on save.
+    fn trimmed(self) -> Self {
+        Self {
+            open_stage_control: self.open_stage_control.trim().to_string(),
+            gig_performer: self.gig_performer.trim().to_string(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Settings {
     pub phone_name: String,
@@ -102,6 +135,10 @@ pub struct Settings {
     /// install paths.
     #[serde(default)]
     pub executables: Executables,
+    /// Chosen window titles for the snap step. Both empty by default, so a
+    /// settings.json written before this existed reads as the built-in names.
+    #[serde(default)]
+    pub window_names: WindowNames,
 }
 
 /// serde needs a function for a non-false default.
@@ -121,6 +158,7 @@ impl Default for Settings {
             manage_defender: true,
             defender_images: DefenderImages::default(),
             executables: Executables::default(),
+            window_names: WindowNames::default(),
         }
     }
 }
@@ -189,11 +227,11 @@ pub fn save_settings(settings: &Settings) {
 /// - A dropdown reads empty when its device is not connected. Taking that at
 ///   face value would wipe the remembered device, so an empty one keeps
 ///   whatever was stored.
-/// - The Advanced paths — the Defender images and the two executables — follow
-///   the opposite rule to the dropdowns: an empty one means "use the built-in
-///   default", not "keep what was stored". Carrying the stored path over
-///   instead would make the Default button impossible, since clearing a field
-///   would just restore the old path on save.
+/// - The Advanced groups — the Defender images, the two executables and the two
+///   window names — follow the opposite rule to the dropdowns: an empty one
+///   means "use the built-in default", not "keep what was stored". Carrying the
+///   stored value over instead would make the Default button impossible, since
+///   clearing a field would just restore the old one on save.
 pub fn merge_from_form(stored: Settings, form: FormInput) -> Settings {
     Settings {
         phone_name: form.phone.trim().to_string(),
@@ -213,6 +251,7 @@ pub fn merge_from_form(stored: Settings, form: FormInput) -> Settings {
         manage_defender: stored.manage_defender,
         defender_images: form.defender_images.trimmed(),
         executables: form.executables.trimmed(),
+        window_names: form.window_names.trimmed(),
     }
 }
 
@@ -231,6 +270,7 @@ pub struct FormInput<'a> {
     pub audio_device: &'a str,
     pub defender_images: DefenderImages,
     pub executables: Executables,
+    pub window_names: WindowNames,
 }
 
 #[cfg(test)]
@@ -254,6 +294,10 @@ mod tests {
                 gig_performer: "D:/apps/GigPerformer5.exe".into(),
                 ..Default::default()
             },
+            window_names: WindowNames {
+                gig_performer: "Keyboard_Live".into(),
+                ..Default::default()
+            },
         }
     }
 
@@ -269,6 +313,7 @@ mod tests {
             audio_device: "y",
             defender_images: DefenderImages::default(),
             executables: Executables::default(),
+            window_names: WindowNames::default(),
         }
     }
 
@@ -426,6 +471,52 @@ mod tests {
         );
     }
 
+    #[test]
+    fn a_chosen_window_name_is_saved() {
+        let saved = merge_from_form(
+            stored(),
+            FormInput {
+                window_names: WindowNames {
+                    open_stage_control: "O-S-C".into(),
+                    gig_performer: "Wedding_Set".into(),
+                },
+                ..form()
+            },
+        );
+        assert_eq!(saved.window_names.open_stage_control, "O-S-C");
+        assert_eq!(saved.window_names.gig_performer, "Wedding_Set");
+    }
+
+    /// The same guard as the images and the executables: clearing a window name
+    /// has to mean "go back to the built-in one", not "keep the one on disk".
+    #[test]
+    fn clearing_a_window_name_restores_the_built_in_one() {
+        let saved = merge_from_form(stored(), form());
+        assert_eq!(
+            saved.window_names,
+            WindowNames::default(),
+            "an empty window-name field fell back to the stored name, so Default cannot work"
+        );
+    }
+
+    /// A stray space matters more here than in the path fields: the name is fed
+    /// to a substring match, so " Keyboard_Live" would find nothing at all.
+    #[test]
+    fn window_names_are_trimmed() {
+        let saved = merge_from_form(
+            stored(),
+            FormInput {
+                window_names: WindowNames {
+                    open_stage_control: "  Open Stage Control  ".into(),
+                    gig_performer: " Keyboard_Live ".into(),
+                },
+                ..form()
+            },
+        );
+        assert_eq!(saved.window_names.open_stage_control, "Open Stage Control");
+        assert_eq!(saved.window_names.gig_performer, "Keyboard_Live");
+    }
+
     /// A settings.json written before the Advanced section existed has neither
     /// block, and must read as "use the built-in defaults" rather than failing
     /// to parse and tripping the repair path.
@@ -444,6 +535,7 @@ mod tests {
             serde_json::from_str(json).expect("an older settings.json must parse");
         assert_eq!(parsed.defender_images, DefenderImages::default());
         assert_eq!(parsed.executables, Executables::default());
+        assert_eq!(parsed.window_names, WindowNames::default());
         assert_eq!(parsed.phone_name, "MERBAC PRO");
     }
 }

@@ -1,6 +1,5 @@
 use crate::settings::Settings;
-use arboard::Clipboard;
-use enigo::{Button, Coordinate, Enigo, Key, Keyboard, Mouse, Settings as EnigoSettings};
+use enigo::{Enigo, Key, Keyboard, Settings as EnigoSettings};
 use std::os::windows::process::CommandExt;
 use std::path::Path;
 use std::process::Command;
@@ -113,18 +112,6 @@ fn open_url_on_phone(url: &str, phone_name: &str) {
     run_cmd(&["kdeconnect-cli", "--share", url, "--name", phone_name]);
 }
 
-fn load_the_most_recent_file(enigo: &mut Enigo) {
-    let _ = enigo.move_mouse(14, 62, Coordinate::Abs);
-    let _ = enigo.button(Button::Left, enigo::Direction::Click);
-    thread::sleep(Duration::from_millis(500));
-    let _ = enigo.move_mouse(99, 100, Coordinate::Abs);
-    thread::sleep(Duration::from_millis(500));
-    let _ = enigo.move_mouse(275, 189, Coordinate::Abs);
-    thread::sleep(Duration::from_millis(500));
-    let _ = enigo.move_mouse(450, 189, Coordinate::Abs);
-    let _ = enigo.button(Button::Left, enigo::Direction::Click);
-}
-
 /// Where Gig Performer puts itself.
 const GIG_PERFORMER_DEFAULT: &str =
     r"C:\Program Files\Deskew Technologies\Gig Performer 5\GigPerformer5.exe";
@@ -185,49 +172,35 @@ fn launch_programs(settings: &Settings) {
         "127.0.0.1".to_string()
     });
 
-    let send_value = format!("{}:54344", ip_address);
-    if let Ok(mut clipboard) = Clipboard::new() {
-        let _ = clipboard.set_text(&send_value);
-        console_log!("Copied {} to clipboard.", send_value);
-    }
-
-    // Bring OSC to top
-    if let Some(hwnd) = crate::snap::find_window_by_title("Open Stage Control") {
+    // Bring OSC to top. This reads the same setting the snap step does,
+    // because it is the same window: a name that stopped matching would
+    // otherwise break the F5 and the snap at different moments, and only one
+    // of them would say so.
+    let osc_window = crate::snap::window_name(
+        &settings.window_names.open_stage_control,
+        crate::snap::OPEN_STAGE_CONTROL_WINDOW_DEFAULT,
+    );
+    if let Some(hwnd) = crate::snap::find_window_by_title(osc_window) {
         unsafe {
             let _ = ShowWindow(hwnd, SW_RESTORE);
             let _ = SetForegroundWindow(hwnd);
         }
         thread::sleep(Duration::from_secs(1));
     } else {
-        console_log!("Could not find the Open Stage Control window to foreground.");
+        console_log!(
+            "Could not find an Open Stage Control window matching \"{osc_window}\" to foreground."
+        );
     }
 
     // Losing the input device only costs us the Open Stage Control setup — the
     // phone still gets the URL below, so log it and carry on rather than panic.
     match Enigo::new(&EnigoSettings::default()) {
         Ok(mut enigo) => {
-            let _ = enigo.move_mouse(300, 110, Coordinate::Abs);
-            let _ = enigo.button(Button::Left, enigo::Direction::Click);
-            thread::sleep(Duration::from_millis(500));
+            thread::sleep(Duration::from_secs(2));
 
-            // Ctrl+A, Ctrl+V
-            let _ = enigo.key(Key::Control, enigo::Direction::Press);
-            let _ = enigo.key(Key::Unicode('a'), enigo::Direction::Click);
-            let _ = enigo.key(Key::Unicode('v'), enigo::Direction::Click);
-            let _ = enigo.key(Key::Control, enigo::Direction::Release);
-
-            thread::sleep(Duration::from_secs(1));
-
-            // Click play
-            let _ = enigo.move_mouse(62, 59, Coordinate::Abs);
-            let _ = enigo.button(Button::Left, enigo::Direction::Click);
-
+            // Start the server
+            let _ = enigo.key(Key::F5, enigo::Direction::Click);
             thread::sleep(Duration::from_secs(3));
-
-            let osc_file = crate::utils::resource_path(&settings.osc_file_path);
-            if !osc_file.exists() || settings.osc_file_path.is_empty() {
-                load_the_most_recent_file(&mut enigo);
-            }
         }
         Err(e) => {
             console_log!("Error: could not take control of the keyboard/mouse ({e}).");
@@ -257,10 +230,13 @@ pub fn main(settings: Settings) {
                 "\nNetwork is secure. Ready to launch Gig Performer and Open Stage Control..."
             );
             launch_programs(&settings);
-            thread::sleep(Duration::from_secs(10));
-            crate::snap::snap_gig_windows("GigPerformer-PA-FULL");
-            thread::sleep(Duration::from_secs(20));
-            crate::snap::snap_gig_windows("Keyboard_Live");
+            // 30s, which is exactly when the surviving snap has always run:
+            // there used to be an earlier pass at 10s looking for a different
+            // gig name, and this one 20s behind it. The wait is the point —
+            // Gig Performer only puts the gig file's name in its title once
+            // loading has finished, and until then there is nothing to match.
+            thread::sleep(Duration::from_secs(30));
+            crate::snap::snap_gig_windows(&settings.window_names);
         } else {
             console_log!("\nPlease check your phone hotspot and try again.");
         }

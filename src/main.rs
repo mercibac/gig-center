@@ -23,7 +23,7 @@ mod switch_sleep;
 mod utils;
 mod version;
 
-use settings::{DefenderImages, Executables};
+use settings::{DefenderImages, Executables, WindowNames};
 use slint::{Timer, TimerMode};
 use std::cell::RefCell;
 use std::path::Path;
@@ -112,6 +112,7 @@ fn main() -> Result<(), slint::PlatformError> {
     app.set_manage_defender(settings.manage_defender);
     seed_defender_images(&app, &settings.defender_images);
     seed_executables(&app, &settings.executables);
+    seed_window_names(&app, &settings.window_names);
     app.set_console_text("System initialized. Awaiting command...\n".into());
 
     // Shared with every UI callback below. Slint runs them all on this
@@ -238,6 +239,10 @@ fn main() -> Result<(), slint::PlatformError> {
             .upgrade()
             .map(read_executables)
             .unwrap_or_default();
+        let chosen_window_names = app_weak_save
+            .upgrade()
+            .map(read_window_names)
+            .unwrap_or_default();
 
         let new_settings = settings::merge_from_form(
             stored,
@@ -249,6 +254,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 audio_device: &chosen_audio,
                 defender_images: chosen_images,
                 executables: chosen_programs,
+                window_names: chosen_window_names,
             },
         );
 
@@ -263,6 +269,7 @@ fn main() -> Result<(), slint::PlatformError> {
             app.set_osc_path(new_settings.osc_file_path.into());
             seed_defender_images(&app, &new_settings.defender_images);
             seed_executables(&app, &new_settings.executables);
+            seed_window_names(&app, &new_settings.window_names);
 
             // Follow the devices that were just saved. Without this the meter
             // and the listener stay on whatever they opened last, so a new
@@ -294,6 +301,7 @@ fn main() -> Result<(), slint::PlatformError> {
             let stored = settings::load_settings();
             seed_defender_images(&app, &stored.defender_images);
             seed_executables(&app, &stored.executables);
+            seed_window_names(&app, &stored.window_names);
         }
     });
 
@@ -531,6 +539,27 @@ fn read_executables(app: MainWindow) -> Executables {
     Executables {
         gig_performer: app.get_executable_gig_performer().to_string(),
         open_stage_control: app.get_executable_open_stage_control().to_string(),
+    }
+}
+
+/// Push the stored window names into the Advanced fields, like
+/// [`seed_executables`] and for the same reasons.
+fn seed_window_names(app: &MainWindow, names: &WindowNames) {
+    app.set_window_name_open_stage_control(names.open_stage_control.clone().into());
+    app.set_window_name_gig_performer(names.gig_performer.clone().into());
+}
+
+/// Read the window-name fields back out, for the save.
+///
+/// There is no `report_window_names` to go with this, unlike the images and the
+/// executables: nothing about a window title can be checked at save time, since
+/// whether a window by that name exists is only knowable during a LAUNCH. The
+/// snap step names the string it searched for instead, which is the same
+/// information at the only moment it can be had.
+fn read_window_names(app: MainWindow) -> WindowNames {
+    WindowNames {
+        open_stage_control: app.get_window_name_open_stage_control().to_string(),
+        gig_performer: app.get_window_name_gig_performer().to_string(),
     }
 }
 
