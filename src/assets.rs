@@ -81,8 +81,8 @@ fn decode(bytes: &[u8], name: &str) -> Option<GrayImage> {
 
 // The log name and bytes of each built-in template, kept as consts so both the
 // statics below and `defender_template` can reach them.
-const DEACTIVATION_STATE_NAME: &str = "assets/defender_deactivation_state.png";
-const DEACTIVATION_STATE_BYTES: &[u8] = include_bytes!("../assets/defender_deactivation_state.png");
+const TURN_ON_NAME: &str = "assets/Turn_on.png";
+const TURN_ON_BYTES: &[u8] = include_bytes!("../assets/Turn_on.png");
 const ACTIVATION_STATE_NAME: &str = "assets/defender_activation_state.png";
 const ACTIVATION_STATE_BYTES: &[u8] = include_bytes!("../assets/defender_activation_state.png");
 const MANAGE_SETTINGS_NAME: &str = "assets/defender_manage_settings.png";
@@ -93,7 +93,7 @@ const REALTIME_LABEL_BYTES: &[u8] = include_bytes!("../assets/defender_realtime_
 /// The Defender steps whose template image can be replaced.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DefenderSlot {
-    DeactivationState,
+    TurnOn,
     ActivationState,
     RealtimeLabel,
     ManageSettings,
@@ -103,7 +103,7 @@ impl DefenderSlot {
     /// The log name and bytes of the image compiled into the exe for this step.
     fn built_in(self) -> (&'static str, &'static [u8]) {
         match self {
-            Self::DeactivationState => (DEACTIVATION_STATE_NAME, DEACTIVATION_STATE_BYTES),
+            Self::TurnOn => (TURN_ON_NAME, TURN_ON_BYTES),
             Self::ActivationState => (ACTIVATION_STATE_NAME, ACTIVATION_STATE_BYTES),
             Self::RealtimeLabel => (REALTIME_LABEL_NAME, REALTIME_LABEL_BYTES),
             Self::ManageSettings => (MANAGE_SETTINGS_NAME, MANAGE_SETTINGS_BYTES),
@@ -113,7 +113,7 @@ impl DefenderSlot {
     /// The path chosen for this step, empty when there is none.
     fn chosen(self, images: &DefenderImages) -> &str {
         match self {
-            Self::DeactivationState => &images.deactivation_state,
+            Self::TurnOn => &images.turn_on,
             Self::ActivationState => &images.activation_state,
             Self::RealtimeLabel => &images.realtime_label,
             Self::ManageSettings => &images.manage_settings,
@@ -184,7 +184,7 @@ mod tests {
     #[test]
     fn every_template_decodes_at_its_expected_size() {
         let expected = [
-            (DefenderSlot::DeactivationState, 245, 237),
+            (DefenderSlot::TurnOn, 169, 74),
             (DefenderSlot::ActivationState, 242, 185),
             (DefenderSlot::ManageSettings, 166, 60),
             (DefenderSlot::RealtimeLabel, 123, 48),
@@ -206,11 +206,10 @@ mod tests {
 
     #[test]
     fn no_chosen_image_uses_the_one_in_the_exe() {
-        let template =
-            defender_template(DefenderSlot::DeactivationState, &DefenderImages::default());
+        let template = defender_template(DefenderSlot::TurnOn, &DefenderImages::default());
         let img = template.to_luma8().expect("the built-in image must decode");
-        assert_eq!((img.width(), img.height()), (245, 237));
-        assert_eq!(template.name, DEACTIVATION_STATE_NAME);
+        assert_eq!((img.width(), img.height()), (169, 74));
+        assert_eq!(template.name, TURN_ON_NAME);
     }
 
     /// Whitespace round a path should not count as a choice, so a field left
@@ -218,12 +217,12 @@ mod tests {
     #[test]
     fn a_blank_chosen_image_uses_the_one_in_the_exe() {
         let images = DefenderImages {
-            deactivation_state: "   ".into(),
+            turn_on: "   ".into(),
             ..Default::default()
         };
-        let template = defender_template(DefenderSlot::DeactivationState, &images);
+        let template = defender_template(DefenderSlot::TurnOn, &images);
         let img = template.to_luma8().expect("the built-in image must decode");
-        assert_eq!((img.width(), img.height()), (245, 237));
+        assert_eq!((img.width(), img.height()), (169, 74));
     }
 
     #[test]
@@ -232,10 +231,10 @@ mod tests {
         write_png(&path, 60, 40);
 
         let images = DefenderImages {
-            deactivation_state: path.to_string_lossy().to_string(),
+            turn_on: path.to_string_lossy().to_string(),
             ..Default::default()
         };
-        let template = defender_template(DefenderSlot::DeactivationState, &images);
+        let template = defender_template(DefenderSlot::TurnOn, &images);
         let img = template.to_luma8().expect("the chosen image must decode");
 
         assert_eq!(

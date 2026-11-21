@@ -271,7 +271,7 @@ export component MainWindow inherits Window {
     // The flip side of a two-way binding is that CANCEL no longer discards an
     // edit for free, so the backend re-seeds these when the modal opens.
     in-out property <bool> advanced-expanded: false;
-    in-out property <string> defender-deactivation-state-image: "";
+    in-out property <string> defender-turn-on-image: "";
     in-out property <string> defender-activation-state-image: "";
     in-out property <string> defender-realtime-label-image: "";
     in-out property <string> defender-manage-settings-image: "";
@@ -303,13 +303,12 @@ export component MainWindow inherits Window {
     callback shutdown-toggled(bool);
     callback defender-toggled(bool);
     callback settings-opened();
-    // Takes the slot name — "deactivation-state", "activation-state",
-    // "realtime-label", "manage-settings", "gig-performer" or
-    // "open-stage-control" — and the backend writes the
-    // chosen path back into the matching property above, picking the file
-    // filter from the slot. One argument rather than six callbacks, and
-    // nothing to return: cancelling has to leave the field alone, which a
-    // returned empty string could not express.
+    // Takes the slot name — "turn-on", "activation-state", "realtime-label",
+    // "manage-settings", "gig-performer" or "open-stage-control" — and the
+    // backend writes the chosen path back into the matching property above,
+    // picking the file filter from the slot. One argument rather than six
+    // callbacks, and nothing to return: cancelling has to leave the field
+    // alone, which a returned empty string could not express.
     callback browse-for-path(string);
 
     // ==========================================
@@ -708,10 +707,10 @@ export component MainWindow inherits Window {
                             }
 
                             PathRow {
-                                label: "Deactivation state image:";
+                                label: "Turn on button image:";
                                 placeholder: "Built-in image";
-                                path <=> root.defender-deactivation-state-image;
-                                browse => { root.browse-for-path("deactivation-state"); }
+                                path <=> root.defender-turn-on-image;
+                                browse => { root.browse-for-path("turn-on"); }
                             }
 
                             PathRow {
@@ -736,7 +735,7 @@ export component MainWindow inherits Window {
                             }
 
                             Text {
-                                text: "The two state images are named for what they show, so turning protection on looks for the deactivated card. The realtime label is not clicked: the click lands at a fixed offset below it, so crop a replacement like the original.";
+                                text: "Turning protection on is the one click on Turn on. Turning it off looks for the activation state card, then Manage settings, then clicks a fixed offset below the realtime label — that label is never clicked itself, so crop a replacement like the original.";
                                 color: #9a9a9a;
                                 font-size: 12px;
                                 wrap: word-wrap;

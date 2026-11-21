@@ -269,16 +269,18 @@ says so in the console, rather than leaving the automation clicking nothing.
 
 | Key | What the image shows | Bundled file |
 | --- | --- | --- |
-| `deactivation_state` | The protection card while real-time protection is **off** | `defender_deactivation_state.png` |
-| `activation_state` | The same card while it is **on** | `defender_activation_state.png` |
+| `turn_on` | The **Turn on** button on the protection card | `Turn_on.png` |
+| `activation_state` | The protection card while real-time protection is **on** | `defender_activation_state.png` |
 | `realtime_label` | The "Real-time protection" label | `defender_realtime_label.png` |
 | `manage_settings` | The "Manage settings" link | `defender_manage_settings.png` |
 
-The first two are named for the state the image *shows*, not the step it is used
-in, because the card is matched before the click: switching protection back on
-has to find the card as it looks while protection is off. The files carry no
-`_icon` suffix, unlike the rest of `assets/` — these are screenshots the matcher
-searches the screen for, not icons anything draws.
+`activation_state` is named for the state the image *shows*, not the step it is
+used in, because the card is matched before the click: switching protection
+**off** has to find the card as it looks while protection is still on. Switching
+it back on needs no card — `turn_on` is the whole of that path, and the other
+two images are only used on the way off. The files carry no `_icon` suffix,
+unlike the rest of `assets/` — these are screenshots the matcher searches the
+screen for, not icons anything draws.
 
 One caveat for `realtime_label`: that step clicks a fixed offset below wherever
 the image matched rather than the image itself, so a replacement has to be
