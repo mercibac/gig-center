@@ -172,10 +172,18 @@ fn launch_programs(settings: &Settings) {
         "127.0.0.1".to_string()
     });
 
-    // Bring OSC to top. This reads the same setting the snap step does,
-    // because it is the same window: a name that stopped matching would
-    // otherwise break the F5 and the snap at different moments, and only one
-    // of them would say so.
+    // Bring OSC to top. This reads the same setting the snap step does, and
+    // for the same reason — a name that stopped matching would otherwise
+    // break the F5 and the snap at different moments, and only one of them
+    // would say so. It is not, however, the same window: F5 belongs to the
+    // launcher, while the snap wants the surface that appears once the server
+    // is up. One name reaches both because the launcher's title is the bare
+    // product name and the surface's begins with it.
+    //
+    // Deliberately the frontmost match and not snap::find_window_to_snap:
+    // nothing but the launcher is open this early, and if the surface is up
+    // after all — a second LAUNCH over a running server — then F5 belongs to
+    // the launcher even so.
     let osc_window = crate::snap::window_name(
         &settings.window_names.open_stage_control,
         crate::snap::OPEN_STAGE_CONTROL_WINDOW_DEFAULT,
