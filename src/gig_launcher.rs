@@ -183,15 +183,15 @@ fn launch_programs(settings: &Settings) {
         console_log!("Could not find the Open Stage Control window to foreground.");
     }
 
+    // Losing the input device only costs us the Open Stage Control setup — the
     // phone still gets the URL below, so log it and carry on rather than panic.
     match Enigo::new(&EnigoSettings::default()) {
         Ok(mut enigo) => {
             thread::sleep(Duration::from_secs(2));
 
-            //Start the server
+            // Start the server
             let _ = enigo.key(Key::F5, enigo::Direction::Click);
             thread::sleep(Duration::from_secs(3));
-
         }
         Err(e) => {
             console_log!("Error: could not take control of the keyboard/mouse ({e}).");
