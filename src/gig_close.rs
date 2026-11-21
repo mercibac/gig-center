@@ -14,17 +14,39 @@ const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 /// Gap between the last teardown step and the machine going down.
 const SHUTDOWN_DELAY: Duration = Duration::from_secs(2);
 
+/// Gig Performer, without its major version.
+///
+/// Version-agnostic on purpose. This read `GigPerformer4.exe` while LAUNCH
+/// started `GigPerformer5.exe`, and because the match below is a `contains`,
+/// the two never met: CLEAR DECK reported success having killed nothing, and
+/// left Gig Performer holding the audio device. Pinning `5` instead would only
+/// have moved that failure to the next major version, and the number buys
+/// nothing a substring match needs.
+const GIG_PERFORMER_PROCESS: &str = "GigPerformer";
+
+/// Open Stage Control. Its executable carries no version.
+const OPEN_STAGE_CONTROL_PROCESS: &str = "open-stage-control.exe";
+
+/// Whether a running process is one of the ones to kill.
+///
+/// Pulled out of the loop below so the rule is testable without a live process
+/// list, which is what lets the tests pin that Gig Performer still matches
+/// across major versions. A case-insensitive substring, so a target may be a
+/// whole executable name or just the part of it that does not change.
+fn process_matches(process_name: &str, targets: &[&str]) -> bool {
+    let process_name = process_name.to_lowercase();
+    targets
+        .iter()
+        .any(|&t| process_name.contains(&t.to_lowercase()))
+}
+
 pub fn force_kill(target_processes: &[&str]) {
     console_log!("--- Phase 1: Force Killing Gig Apps ---");
     let mut sys = System::new_all();
     sys.refresh_processes();
 
     for process in sys.processes().values() {
-        let process_name = process.name().to_lowercase();
-        if target_processes
-            .iter()
-            .any(|&t| process_name.contains(&t.to_lowercase()))
-        {
+        if process_matches(process.name(), target_processes) {
             console_log!("Force killing process: {}", process.name());
             process.kill();
         }
@@ -101,7 +123,7 @@ pub fn main(shutdown_after: bool, manage_defender: bool) {
     }
     crate::utils::set_volume(50);
 
-    let apps_to_nuke = ["GigPerformer4.exe", "open-stage-control.exe"];
+    let apps_to_nuke = [GIG_PERFORMER_PROCESS, OPEN_STAGE_CONTROL_PROCESS];
     let apps_to_protect = ["firefox", "gig control center", "wezterm"];
 
     force_kill(&apps_to_nuke);
@@ -112,5 +134,57 @@ pub fn main(shutdown_after: bool, manage_defender: bool) {
     // Last thing, once every step above has finished.
     if shutdown_after {
         shutdown_pc(SHUTDOWN_DELAY);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The real targets, not a copy of them, so these fail if the list drifts.
+    const TARGETS: [&str; 2] = [GIG_PERFORMER_PROCESS, OPEN_STAGE_CONTROL_PROCESS];
+
+    /// The bug this guards: the target read `GigPerformer4.exe` while LAUNCH
+    /// started `GigPerformer5.exe`, so Phase 1 matched nothing and CLEAR DECK
+    /// said it was done with Gig Performer still running.
+    #[test]
+    fn gig_performer_is_killed_whatever_its_major_version() {
+        for name in [
+            "GigPerformer4.exe",
+            "GigPerformer5.exe",
+            "GigPerformer6.exe",
+        ] {
+            assert!(
+                process_matches(name, &TARGETS),
+                "{name} would have been left running"
+            );
+        }
+    }
+
+    #[test]
+    fn open_stage_control_is_killed() {
+        assert!(process_matches("open-stage-control.exe", &TARGETS));
+    }
+
+    /// Phase 1 kills without asking, so the match must not reach anything that
+    /// merely sits nearby — Gig Center itself above all, since killing it would
+    /// take Phase 2 down with it.
+    #[test]
+    fn unrelated_processes_are_left_alone() {
+        for name in [
+            "firefox.exe",
+            "explorer.exe",
+            "gigcontrolcenter.exe",
+            "gig-center.exe",
+            "wezterm-gui.exe",
+        ] {
+            assert!(!process_matches(name, &TARGETS), "{name} would be killed");
+        }
+    }
+
+    #[test]
+    fn the_match_ignores_case() {
+        assert!(process_matches("GIGPERFORMER5.EXE", &TARGETS));
+        assert!(process_matches("OPEN-STAGE-CONTROL.EXE", &TARGETS));
     }
 }
