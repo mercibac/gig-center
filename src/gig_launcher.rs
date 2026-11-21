@@ -113,18 +113,6 @@ fn open_url_on_phone(url: &str, phone_name: &str) {
     run_cmd(&["kdeconnect-cli", "--share", url, "--name", phone_name]);
 }
 
-fn load_the_most_recent_file(enigo: &mut Enigo) {
-    let _ = enigo.move_mouse(14, 62, Coordinate::Abs);
-    let _ = enigo.button(Button::Left, enigo::Direction::Click);
-    thread::sleep(Duration::from_millis(500));
-    let _ = enigo.move_mouse(99, 100, Coordinate::Abs);
-    thread::sleep(Duration::from_millis(500));
-    let _ = enigo.move_mouse(275, 189, Coordinate::Abs);
-    thread::sleep(Duration::from_millis(500));
-    let _ = enigo.move_mouse(450, 189, Coordinate::Abs);
-    let _ = enigo.button(Button::Left, enigo::Direction::Click);
-}
-
 /// Where Gig Performer puts itself.
 const GIG_PERFORMER_DEFAULT: &str =
     r"C:\Program Files\Deskew Technologies\Gig Performer 5\GigPerformer5.exe";
