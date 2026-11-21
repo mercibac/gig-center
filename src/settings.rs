@@ -14,17 +14,16 @@ use std::path::{Path, PathBuf};
 /// fields in [`Settings`]; [`merge_from_form`] says why.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DefenderImages {
-    // These two are named for the state the image *shows*, not the step it is
-    // used in. That is the opposite way round, and it is the part that reads
-    // oddly until you see why: the card is matched *before* the click, so
-    // turning protection back on has to look for the card as it appears while
-    // protection is off.
-    /// The "Virus & threat protection" card as it looks while real-time
-    /// protection is off. Matched on the way back on, during CLEAR DECK.
+    /// The "Turn on" button on the "Virus & threat protection" card. Clicked
+    /// during CLEAR DECK, and that one click is the whole of the way back on:
+    /// the button switches real-time protection on by itself.
     #[serde(default)]
-    pub deactivation_state: String,
-    /// The same card as it looks while real-time protection is on. Matched on
-    /// the way off, during LAUNCH.
+    pub turn_on: String,
+    /// The "Virus & threat protection" card as it looks while real-time
+    /// protection is *on*. Named for the state it shows rather than the step
+    /// it is used in, which reads oddly until you see why: the card is matched
+    /// *before* it is clicked, so the way *off* — during LAUNCH — is what has
+    /// to look for the card as it appears while protection is still on.
     #[serde(default)]
     pub activation_state: String,
     /// The "Real-time protection" label the last click is offset from.
@@ -39,7 +38,7 @@ impl DefenderImages {
     /// Trim every path, the way the text fields are trimmed on save.
     fn trimmed(self) -> Self {
         Self {
-            deactivation_state: self.deactivation_state.trim().to_string(),
+            turn_on: self.turn_on.trim().to_string(),
             activation_state: self.activation_state.trim().to_string(),
             realtime_label: self.realtime_label.trim().to_string(),
             manage_settings: self.manage_settings.trim().to_string(),
@@ -287,7 +286,7 @@ mod tests {
             shutdown_after_clear: true,
             manage_defender: false,
             defender_images: DefenderImages {
-                deactivation_state: "D:/shots/deactivation_state.png".into(),
+                turn_on: "D:/shots/turn_on.png".into(),
                 ..Default::default()
             },
             executables: Executables {
@@ -374,17 +373,14 @@ mod tests {
             stored(),
             FormInput {
                 defender_images: DefenderImages {
-                    deactivation_state: "D:/shots/new_deactivation_state.png".into(),
+                    turn_on: "D:/shots/new_turn_on.png".into(),
                     realtime_label: "D:/shots/new_realtime_label.png".into(),
                     ..Default::default()
                 },
                 ..form()
             },
         );
-        assert_eq!(
-            saved.defender_images.deactivation_state,
-            "D:/shots/new_deactivation_state.png"
-        );
+        assert_eq!(saved.defender_images.turn_on, "D:/shots/new_turn_on.png");
         assert_eq!(
             saved.defender_images.realtime_label,
             "D:/shots/new_realtime_label.png"

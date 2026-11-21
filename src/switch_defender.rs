@@ -55,46 +55,49 @@ pub fn switch_defender(option: &str) {
     // next toggle without a restart.
     let images = settings::load_settings().defender_images;
 
-    let slot_1 = if option == "on" {
-        DefenderSlot::DeactivationState
+    if option == "on" {
+        // One click and done. The "Turn on" button on the protection card
+        // switches real-time protection on by itself, so the two steps the way
+        // off takes below — Manage settings, then the toggle under the
+        // Real-time protection label — must not follow it: by then the page is
+        // in its protection-on layout and that click would switch it straight
+        // back off.
+        let turn_on = assets::defender_template(DefenderSlot::TurnOn, &images);
+        screen::click_on_img(&turn_on, &mut enigo);
+
+        // Long enough for Defender to apply the change and redraw the card, so
+        // the Alt+F4 below closes a window that has finished with it.
+        thread::sleep(Duration::from_secs(5));
     } else {
-        DefenderSlot::ActivationState
-    };
+        let card = assets::defender_template(DefenderSlot::ActivationState, &images);
+        screen::click_on_img(&card, &mut enigo);
 
-    let icon_def_1 = assets::defender_template(slot_1, &images);
-    screen::click_on_img(&icon_def_1, &mut enigo);
+        let manage_settings = assets::defender_template(DefenderSlot::ManageSettings, &images);
+        screen::click_on_img(&manage_settings, &mut enigo);
 
-    let icon_def_2 = assets::defender_template(DefenderSlot::ManageSettings, &images);
-    screen::click_on_img(&icon_def_2, &mut enigo);
+        // The click below is an offset from wherever this image matched, not on
+        // the image itself, so a replacement has to be cropped like the original
+        // one for the offset to still land on the toggle.
+        let realtime_label = assets::defender_template(DefenderSlot::RealtimeLabel, &images);
+        if let Some((img_x, img_y)) = screen::find_on_screen(&realtime_label, 0.8) {
+            let target_x = img_x - 20;
+            let target_y = img_y + 130;
 
-    // 0.9, not the 0.8 default — the Python prototype asked for the stricter
-    // confidence on this one because the click target is derived by offset.
-    //
-    // The click below is an offset from wherever this image matched, not on the
-    // image itself, so a replacement has to be cropped like the original one for
-    // the offsets to still land on the toggle.
-    let icon_def_3 = assets::defender_template(DefenderSlot::RealtimeLabel, &images);
-    if let Some((img_x, img_y)) = screen::find_on_screen(&icon_def_3, 0.8) {
-        let target_x = img_x - 20;
-        let target_y = if option == "on" {
-            img_y + 160
+            let _ = enigo.move_mouse(target_x, target_y, Coordinate::Abs);
+            thread::sleep(Duration::from_millis(500));
+            let _ = enigo.button(Button::Left, enigo::Direction::Click);
+            console_log!(
+                "Success! Clicked the toggle below the label at: ({}, {})",
+                target_x,
+                target_y
+            );
         } else {
-            img_y + 130
-        };
+            console_log!("Error: Image could not be found on the screen.");
+        }
 
-        let _ = enigo.move_mouse(target_x, target_y, Coordinate::Abs);
-        thread::sleep(Duration::from_millis(500));
-        let _ = enigo.button(Button::Left, enigo::Direction::Click);
-        console_log!(
-            "Success! Clicked 20px below the image at: ({}, {})",
-            target_x,
-            target_y
-        );
-    } else {
-        console_log!("Error: Image could not be found on the screen.");
+        thread::sleep(Duration::from_secs(3));
     }
 
-    thread::sleep(Duration::from_secs(3));
     let _ = enigo.key(Key::Alt, enigo::Direction::Press);
     let _ = enigo.key(Key::F4, enigo::Direction::Click);
     let _ = enigo.key(Key::Alt, enigo::Direction::Release);
