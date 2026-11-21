@@ -1,6 +1,5 @@
 use crate::settings::Settings;
-use arboard::Clipboard;
-use enigo::{Button, Coordinate, Enigo, Key, Keyboard, Mouse, Settings as EnigoSettings};
+use enigo::{Enigo, Key, Keyboard, Settings as EnigoSettings};
 use std::os::windows::process::CommandExt;
 use std::path::Path;
 use std::process::Command;
@@ -173,12 +172,6 @@ fn launch_programs(settings: &Settings) {
         "127.0.0.1".to_string()
     });
 
-    let send_value = format!("{}:54344", ip_address);
-    if let Ok(mut clipboard) = Clipboard::new() {
-        let _ = clipboard.set_text(&send_value);
-        console_log!("Copied {} to clipboard.", send_value);
-    }
-
     // Bring OSC to top
     if let Some(hwnd) = crate::snap::find_window_by_title("Open Stage Control") {
         unsafe {
@@ -190,32 +183,15 @@ fn launch_programs(settings: &Settings) {
         console_log!("Could not find the Open Stage Control window to foreground.");
     }
 
-    // Losing the input device only costs us the Open Stage Control setup — the
     // phone still gets the URL below, so log it and carry on rather than panic.
     match Enigo::new(&EnigoSettings::default()) {
         Ok(mut enigo) => {
-            let _ = enigo.move_mouse(300, 110, Coordinate::Abs);
-            let _ = enigo.button(Button::Left, enigo::Direction::Click);
-            thread::sleep(Duration::from_millis(500));
+            thread::sleep(Duration::from_secs(2));
 
-            // Ctrl+A, Ctrl+V
-            let _ = enigo.key(Key::Control, enigo::Direction::Press);
-            let _ = enigo.key(Key::Unicode('a'), enigo::Direction::Click);
-            let _ = enigo.key(Key::Unicode('v'), enigo::Direction::Click);
-            let _ = enigo.key(Key::Control, enigo::Direction::Release);
-
-            thread::sleep(Duration::from_secs(1));
-
-            // Click play
-            let _ = enigo.move_mouse(62, 59, Coordinate::Abs);
-            let _ = enigo.button(Button::Left, enigo::Direction::Click);
-
+            //Start the server
+            let _ = enigo.key(Key::F5, enigo::Direction::Click);
             thread::sleep(Duration::from_secs(3));
 
-            let osc_file = crate::utils::resource_path(&settings.osc_file_path);
-            if !osc_file.exists() || settings.osc_file_path.is_empty() {
-                load_the_most_recent_file(&mut enigo);
-            }
         }
         Err(e) => {
             console_log!("Error: could not take control of the keyboard/mouse ({e}).");
