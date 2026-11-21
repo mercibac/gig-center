@@ -259,6 +259,7 @@ working directory instead — the repository root, in practice.
 | `manage_defender` | Whether LAUNCH and CLEAR DECK toggle Defender at all (default on) |
 | `defender_images` | Replacements for the four Defender screen-match images — see below |
 | `executables` | Where Gig Performer and Open Stage Control live — see below |
+| `window_names` | Which windows LAUNCH snaps into place — see below |
 
 `defender_images` holds one path per Defender step, set from **Advanced** in the
 settings dialog. An empty entry, which is the default, means the image compiled
@@ -296,6 +297,29 @@ The Open Stage Control default carries its version in the folder name, so it
 goes stale on every upgrade — that is mainly what this is for. A path that is
 no longer there falls back to the built-in one and says so in the console,
 rather than starting nothing; LAUNCH also logs which executable it used.
+
+`window_names` holds the two window titles LAUNCH searches for when it snaps
+Open Stage Control into the left half of the screen and Gig Performer into the
+right, set from the same **Advanced** section. These are not paths: each is
+matched as a case-insensitive *part* of a window's title bar, and the first
+visible window that matches wins. Empty means the name compiled into the exe,
+so clearing a field restores it:
+
+| Key | Built-in name |
+| --- | --- |
+| `open_stage_control` | `Open Stage Control` |
+| `gig_performer` | `Keyboard_Live` |
+
+The Gig Performer default is a gig file's name, because that is what Gig
+Performer puts in its title bar once the file has loaded — so it goes stale
+whenever a gig file is renamed, which is mainly what this is for. The snap runs
+30s after the programs start, since there is nothing to match until loading has
+finished, and it names the string it searched for when it finds nothing. That
+line is the only way to tell a mistyped name from an app that never started.
+
+`open_stage_control` also drives the window LAUNCH brings to the front before
+sending the F5 that starts the Open Stage Control server — the same window, so
+one name covers both.
 
 A packaged build keeps its own `settings.json` next to the `.exe`. Nothing ships
 bundled alongside it, so a fresh install starts from the built-in defaults and

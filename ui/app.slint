@@ -85,11 +85,17 @@ component FoldHeader inherits Rectangle {
 // ==========================================
 // ADVANCED PATH ROW
 // ==========================================
-// One overridable path — a Defender screen-match image, or one of the programs
-// LAUNCH starts: where it is, a picker, and the way back to the original.
+// One overridable value — a Defender screen-match image, one of the programs
+// LAUNCH starts, or a window title it searches for: what it is, a picker, and
+// the way back to the original.
 //
 // Empty text means the built-in default, which is why Default is a single
 // assignment with no backend round trip — only `browse` needs one.
+//
+// `show-browse: false` drops the picker for the rows that have nothing to pick:
+// a window title is typed, not chosen from the filesystem. Everything else
+// about the row is shared, which is the reason this is a flag rather than a
+// second component.
 //
 // Label and field keep the 170px/20px column the rows above use; the buttons
 // sit in their own 8px group so the row's natural minimum stays narrow enough
@@ -97,6 +103,7 @@ component FoldHeader inherits Rectangle {
 component PathRow inherits HorizontalLayout {
     in property <string> label;
     in property <string> placeholder: "Built-in default";
+    in property <bool> show-browse: true;
     in-out property <string> path;
     callback browse();
 
@@ -120,7 +127,7 @@ component PathRow inherits HorizontalLayout {
             min-width: 100px;
         }
 
-        DarkButton {
+        if (root.show-browse) : DarkButton {
             btn-text: "…";
             btn-font-size: 16px;
             width: 32px;
@@ -275,6 +282,14 @@ export component MainWindow inherits Window {
     // every upgrade — that is what these are mainly for.
     in-out property <string> executable-gig-performer: "";
     in-out property <string> executable-open-stage-control: "";
+
+    // --- Advanced: the window titles the snap step searches for ---
+    // The same empty-means-default rule once more. These are matched against a
+    // window's title rather than opened, and the Gig Performer one is the gig
+    // file's name, so it goes stale whenever a gig file is renamed. No Browse
+    // on these rows: there is no file to pick.
+    in-out property <string> window-name-open-stage-control: "";
+    in-out property <string> window-name-gig-performer: "";
 
     // --- Version ---
     // Pushed from Rust so the label can never disagree with Cargo.toml.
@@ -534,12 +549,14 @@ export component MainWindow inherits Window {
             // rows sat behind a scrollbar while a third of the window's height
             // went unused below the panel.
             //
-            // 920px is measured against the content — ~740px of rows and notes
-            // plus ~165px of title, padding and the button row — and it stays a
-            // cap rather than a plain height, so a tall window does not stretch
-            // the panel past its own content. A window shorter than that still
-            // scrolls, which is what the ScrollView and its gutter are for.
-            height: min(root.advanced-expanded ? 920px : 520px, parent.height - 32px);
+            // 1100px is measured against the content — ~930px of rows and
+            // notes plus ~165px of title, padding and the button row — and it
+            // stays a cap rather than a plain height, so a tall window does not
+            // stretch the panel past its own content. A window shorter than
+            // that still scrolls, which is what the ScrollView and its gutter
+            // are for. It was 920px before the Window names group added a
+            // heading, two rows and a note.
+            height: min(root.advanced-expanded ? 1100px : 520px, parent.height - 32px);
             x: (parent.width - self.width) / 2;
             y: (parent.height - self.height) / 2;
 
@@ -748,6 +765,34 @@ export component MainWindow inherits Window {
 
                             Text {
                                 text: "A path that is no longer there falls back to the built-in one and says so in the console.";
+                                color: #9a9a9a;
+                                font-size: 12px;
+                                wrap: word-wrap;
+                            }
+
+                            Text {
+                                text: "Window names";
+                                color: #d4d4d4;
+                                font-size: 13px;
+                                font-weight: 700;
+                            }
+
+                            PathRow {
+                                label: "Open Stage Control window:";
+                                placeholder: "Open Stage Control";
+                                show-browse: false;
+                                path <=> root.window-name-open-stage-control;
+                            }
+
+                            PathRow {
+                                label: "Gig Performer window:";
+                                placeholder: "Keyboard_Live";
+                                show-browse: false;
+                                path <=> root.window-name-gig-performer;
+                            }
+
+                            Text {
+                                text: "What LAUNCH looks for when it snaps the two windows into their halves of the screen. Matched as a case-insensitive part of the title bar, and the first visible window that matches wins — so the Gig Performer one is usually the name of the gig file, which is what it shows once the file has loaded.";
                                 color: #9a9a9a;
                                 font-size: 12px;
                                 wrap: word-wrap;

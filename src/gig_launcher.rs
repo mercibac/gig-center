@@ -172,15 +172,24 @@ fn launch_programs(settings: &Settings) {
         "127.0.0.1".to_string()
     });
 
-    // Bring OSC to top
-    if let Some(hwnd) = crate::snap::find_window_by_title("Open Stage Control") {
+    // Bring OSC to top. This reads the same setting the snap step does,
+    // because it is the same window: a name that stopped matching would
+    // otherwise break the F5 and the snap at different moments, and only one
+    // of them would say so.
+    let osc_window = crate::snap::window_name(
+        &settings.window_names.open_stage_control,
+        crate::snap::OPEN_STAGE_CONTROL_WINDOW_DEFAULT,
+    );
+    if let Some(hwnd) = crate::snap::find_window_by_title(osc_window) {
         unsafe {
             let _ = ShowWindow(hwnd, SW_RESTORE);
             let _ = SetForegroundWindow(hwnd);
         }
         thread::sleep(Duration::from_secs(1));
     } else {
-        console_log!("Could not find the Open Stage Control window to foreground.");
+        console_log!(
+            "Could not find an Open Stage Control window matching \"{osc_window}\" to foreground."
+        );
     }
 
     // Losing the input device only costs us the Open Stage Control setup — the
@@ -221,10 +230,13 @@ pub fn main(settings: Settings) {
                 "\nNetwork is secure. Ready to launch Gig Performer and Open Stage Control..."
             );
             launch_programs(&settings);
-            thread::sleep(Duration::from_secs(10));
-            crate::snap::snap_gig_windows("GigPerformer-PA-FULL");
-            thread::sleep(Duration::from_secs(20));
-            crate::snap::snap_gig_windows("Keyboard_Live");
+            // 30s, which is exactly when the surviving snap has always run:
+            // there used to be an earlier pass at 10s looking for a different
+            // gig name, and this one 20s behind it. The wait is the point —
+            // Gig Performer only puts the gig file's name in its title once
+            // loading has finished, and until then there is nothing to match.
+            thread::sleep(Duration::from_secs(30));
+            crate::snap::snap_gig_windows(&settings.window_names);
         } else {
             console_log!("\nPlease check your phone hotspot and try again.");
         }
