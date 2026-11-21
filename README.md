@@ -260,6 +260,7 @@ working directory instead — the repository root, in practice.
 | `defender_images` | Replacements for the four Defender screen-match images — see below |
 | `executables` | Where Gig Performer and Open Stage Control live — see below |
 | `window_names` | Which windows LAUNCH snaps into place — see below |
+| `snap_ratio` | How much of the width Open Stage Control gets when they are snapped — see below |
 
 `defender_images` holds one path per Defender step, set from **Advanced** in the
 settings dialog. An empty entry, which is the default, means the image compiled
@@ -301,8 +302,8 @@ no longer there falls back to the built-in one and says so in the console,
 rather than starting nothing; LAUNCH also logs which executable it used.
 
 `window_names` holds the two window titles LAUNCH searches for when it snaps
-Open Stage Control into the left half of the screen and Gig Performer into the
-right, set from the same **Advanced** section. These are not paths: each is
+Open Stage Control into the left of the screen and Gig Performer into the rest,
+set from the same **Advanced** section. These are not paths: each is
 matched as a case-insensitive *part* of a window's title bar, and the first
 visible window that matches wins. Empty means the name compiled into the exe,
 so clearing a field restores it:
@@ -322,6 +323,30 @@ line is the only way to tell a mistyped name from an app that never started.
 `open_stage_control` also drives the window LAUNCH brings to the front before
 sending the F5 that starts the Open Stage Control server — the same window, so
 one name covers both.
+
+`snap_ratio` is how wide Open Stage Control is when that snap happens, as a
+percentage of the screen width, set from the same **Advanced** section. Gig
+Performer takes whatever is left, so this is the only number there is: a second
+field could be set to a pair that leaves a strip of desktop down the middle.
+Empty means the built-in **29%**, which is the split this rig plays, so clearing
+the field restores it — `50` is the half-and-half the app did before this
+existed.
+
+Both windows are placed by their *painted* edges rather than by the rectangle
+Windows moves, which is bigger: a resizable window carries an invisible resize
+border that the drop shadow is drawn into. Ignoring it left about 20px of
+whatever was behind showing between the two, and Gig Performer 8px short of the
+right-hand screen edge. Each window is also raised as it is placed, and Gig
+Performer is left with the focus — Open Stage Control keeps a second, smaller
+launcher window that is never snapped, and it used to end up on top.
+
+The field is read loosely, because it is a plain text box: `29`, `29%`, `28.9`
+and `28,9` all mean the same width. Anything outside **10 to 90** is pulled back
+to the nearest end rather than honoured, since a width of `2` typed for `29`
+would hide a window instead of narrowing it. The console names the width it
+used on every LAUNCH, and says so plainly when a value was clamped or could not
+be read at all — the same reasoning as the window names above, where a setting
+that did not take effect must not look like an app that failed to start.
 
 A packaged build keeps its own `settings.json` next to the `.exe`. Nothing ships
 bundled alongside it, so a fresh install starts from the built-in defaults and
