@@ -321,8 +321,28 @@ finished, and it names the string it searched for when it finds nothing. That
 line is the only way to tell a mistyped name from an app that never started.
 
 `open_stage_control` also drives the window LAUNCH brings to the front before
-sending the F5 that starts the Open Stage Control server — the same window, so
-one name covers both.
+sending the F5 that starts the Open Stage Control server. One name covers both
+steps, but they are not the same window: Open Stage Control runs two at once,
+and they share a process and a window class, so only the title tells them
+apart.
+
+| Window | Title | Wanted by |
+| --- | --- | --- |
+| launcher | `Open Stage Control` | the F5, which starts the server |
+| surface | `Open Stage Control v1.30.1 (PSC LIVE MERBAC-MP.json)` | the snap |
+
+Both contain the built-in name, and windows are searched front to back, so
+which one the snap moved used to depend on which had been clicked last —
+clicking the launcher during the 30s wait was enough to get it snapped into
+place while the controls stayed where they were. The snap now passes over a
+window whose *whole* title is the built-in name, since that is the launcher
+and nothing else; with only one match, or with none that are more specific,
+it takes the frontmost as before.
+
+The comparison is against the built-in name rather than against whatever was
+typed, so a field holding a window's exact title — which is what
+`gig_performer` holds here — still names that window and cannot lose it to
+something broader.
 
 `snap_ratio` is how wide Open Stage Control is when that snap happens, as a
 percentage of the screen width, set from the same **Advanced** section. Gig
