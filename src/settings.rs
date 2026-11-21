@@ -139,6 +139,17 @@ pub struct Settings {
     /// settings.json written before this existed reads as the built-in names.
     #[serde(default)]
     pub window_names: WindowNames,
+    /// Open Stage Control's share of the screen width when LAUNCH snaps the
+    /// two windows, as a percentage. Gig Performer takes the rest, so there is
+    /// deliberately no second field — a pair could be set to two numbers that
+    /// do not cover the screen.
+    ///
+    /// A string rather than a number so it can follow the same Advanced rule
+    /// as everything else here: empty means the share built into the exe, and
+    /// that is what the Default button writes. [`crate::snap::snap_width`]
+    /// reads it, and says in the console what it made of it.
+    #[serde(default)]
+    pub snap_ratio: String,
 }
 
 /// serde needs a function for a non-false default.
@@ -159,6 +170,7 @@ impl Default for Settings {
             defender_images: DefenderImages::default(),
             executables: Executables::default(),
             window_names: WindowNames::default(),
+            snap_ratio: String::new(),
         }
     }
 }
@@ -227,9 +239,10 @@ pub fn save_settings(settings: &Settings) {
 /// - A dropdown reads empty when its device is not connected. Taking that at
 ///   face value would wipe the remembered device, so an empty one keeps
 ///   whatever was stored.
-/// - The Advanced groups — the Defender images, the two executables and the two
-///   window names — follow the opposite rule to the dropdowns: an empty one
-///   means "use the built-in default", not "keep what was stored". Carrying the
+/// - The Advanced groups — the Defender images, the two executables, the two
+///   window names and the snap ratio — follow the opposite rule to the
+///   dropdowns: an empty one means "use the built-in default", not "keep what
+///   was stored". Carrying the
 ///   stored value over instead would make the Default button impossible, since
 ///   clearing a field would just restore the old one on save.
 pub fn merge_from_form(stored: Settings, form: FormInput) -> Settings {
@@ -252,6 +265,7 @@ pub fn merge_from_form(stored: Settings, form: FormInput) -> Settings {
         defender_images: form.defender_images.trimmed(),
         executables: form.executables.trimmed(),
         window_names: form.window_names.trimmed(),
+        snap_ratio: form.snap_ratio.trim().to_string(),
     }
 }
 
@@ -271,6 +285,7 @@ pub struct FormInput<'a> {
     pub defender_images: DefenderImages,
     pub executables: Executables,
     pub window_names: WindowNames,
+    pub snap_ratio: &'a str,
 }
 
 #[cfg(test)]
@@ -298,6 +313,7 @@ mod tests {
                 gig_performer: "Keyboard_Live".into(),
                 ..Default::default()
             },
+            snap_ratio: "50".into(),
         }
     }
 
@@ -314,6 +330,7 @@ mod tests {
             defender_images: DefenderImages::default(),
             executables: Executables::default(),
             window_names: WindowNames::default(),
+            snap_ratio: "",
         }
     }
 
@@ -536,6 +553,48 @@ mod tests {
         assert_eq!(parsed.defender_images, DefenderImages::default());
         assert_eq!(parsed.executables, Executables::default());
         assert_eq!(parsed.window_names, WindowNames::default());
+        assert_eq!(
+            parsed.snap_ratio, "",
+            "a file without snap_ratio must read as the built-in share"
+        );
         assert_eq!(parsed.phone_name, "MERBAC PRO");
+    }
+
+    #[test]
+    fn a_chosen_snap_ratio_is_saved() {
+        let saved = merge_from_form(
+            stored(),
+            FormInput {
+                snap_ratio: "29",
+                ..form()
+            },
+        );
+        assert_eq!(saved.snap_ratio, "29");
+    }
+
+    /// The same guard the images, executables and window names each have:
+    /// clearing the ratio has to mean "go back to the built-in share", not
+    /// "keep the one on disk" — `stored()` holds 50, so a fallback would show.
+    #[test]
+    fn clearing_the_snap_ratio_restores_the_built_in_share() {
+        let saved = merge_from_form(stored(), form());
+        assert_eq!(
+            saved.snap_ratio, "",
+            "an empty ratio field fell back to the stored one, so Default cannot work"
+        );
+    }
+
+    /// Trimmed here as well as in `snap_width`, so what is written to disk is
+    /// what comes back into the field on the next open.
+    #[test]
+    fn the_snap_ratio_is_trimmed() {
+        let saved = merge_from_form(
+            stored(),
+            FormInput {
+                snap_ratio: "  29 %  ",
+                ..form()
+            },
+        );
+        assert_eq!(saved.snap_ratio, "29 %");
     }
 }

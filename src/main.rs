@@ -113,6 +113,7 @@ fn main() -> Result<(), slint::PlatformError> {
     seed_defender_images(&app, &settings.defender_images);
     seed_executables(&app, &settings.executables);
     seed_window_names(&app, &settings.window_names);
+    seed_snap_ratio(&app, &settings.snap_ratio);
     app.set_console_text("System initialized. Awaiting command...\n".into());
 
     // Shared with every UI callback below. Slint runs them all on this
@@ -243,6 +244,10 @@ fn main() -> Result<(), slint::PlatformError> {
             .upgrade()
             .map(read_window_names)
             .unwrap_or_default();
+        let chosen_snap_ratio = app_weak_save
+            .upgrade()
+            .map(|app| app.get_snap_ratio().to_string())
+            .unwrap_or_default();
 
         let new_settings = settings::merge_from_form(
             stored,
@@ -255,6 +260,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 defender_images: chosen_images,
                 executables: chosen_programs,
                 window_names: chosen_window_names,
+                snap_ratio: &chosen_snap_ratio,
             },
         );
 
@@ -270,6 +276,7 @@ fn main() -> Result<(), slint::PlatformError> {
             seed_defender_images(&app, &new_settings.defender_images);
             seed_executables(&app, &new_settings.executables);
             seed_window_names(&app, &new_settings.window_names);
+            seed_snap_ratio(&app, &new_settings.snap_ratio);
 
             // Follow the devices that were just saved. Without this the meter
             // and the listener stay on whatever they opened last, so a new
@@ -302,6 +309,7 @@ fn main() -> Result<(), slint::PlatformError> {
             seed_defender_images(&app, &stored.defender_images);
             seed_executables(&app, &stored.executables);
             seed_window_names(&app, &stored.window_names);
+            seed_snap_ratio(&app, &stored.snap_ratio);
         }
     });
 
@@ -561,6 +569,14 @@ fn read_window_names(app: MainWindow) -> WindowNames {
         open_stage_control: app.get_window_name_open_stage_control().to_string(),
         gig_performer: app.get_window_name_gig_performer().to_string(),
     }
+}
+
+/// Push the stored snap ratio into its Advanced field, like the groups above.
+///
+/// Read back inline in the save callback rather than through a `read_` twin:
+/// one property holding one string is not a struct worth naming.
+fn seed_snap_ratio(app: &MainWindow, ratio: &str) {
+    app.set_snap_ratio(ratio.into());
 }
 
 /// The path currently in one Advanced field, named by the slot the UI passes.

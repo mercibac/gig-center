@@ -291,6 +291,12 @@ export component MainWindow inherits Window {
     in-out property <string> window-name-open-stage-control: "";
     in-out property <string> window-name-gig-performer: "";
 
+    // --- Advanced: how wide Open Stage Control is when the snap runs ---
+    // A percentage of the screen width, empty-means-default like the rest.
+    // Only one number because Gig Performer takes the remainder: a second
+    // field could be set to a pair that leaves a strip of desktop showing.
+    in-out property <string> snap-ratio: "";
+
     // --- Version ---
     // Pushed from Rust so the label can never disagree with Cargo.toml.
     // See src/version.rs for why it reads V1.0 and not V1.0.0.
@@ -549,14 +555,15 @@ export component MainWindow inherits Window {
             // rows sat behind a scrollbar while a third of the window's height
             // went unused below the panel.
             //
-            // 1100px is measured against the content — ~930px of rows and
+            // 1240px is measured against the content — ~1075px of rows and
             // notes plus ~165px of title, padding and the button row — and it
             // stays a cap rather than a plain height, so a tall window does not
             // stretch the panel past its own content. A window shorter than
             // that still scrolls, which is what the ScrollView and its gutter
             // are for. It was 920px before the Window names group added a
-            // heading, two rows and a note.
-            height: min(root.advanced-expanded ? 1100px : 520px, parent.height - 32px);
+            // heading, two rows and a note, and 1100px before the Window split
+            // group added a heading, one row and another note.
+            height: min(root.advanced-expanded ? 1240px : 520px, parent.height - 32px);
             x: (parent.width - self.width) / 2;
             y: (parent.height - self.height) / 2;
 
@@ -792,7 +799,28 @@ export component MainWindow inherits Window {
                             }
 
                             Text {
-                                text: "What LAUNCH looks for when it snaps the two windows into their halves of the screen. Matched as a case-insensitive part of the title bar, and the first visible window that matches wins — so the Gig Performer one is usually the name of the gig file, which is what it shows once the file has loaded.";
+                                text: "What LAUNCH looks for when it snaps the two windows into their shares of the screen. Matched as a case-insensitive part of the title bar, and the first visible window that matches wins — so the Gig Performer one is usually the name of the gig file, which is what it shows once the file has loaded.";
+                                color: #9a9a9a;
+                                font-size: 12px;
+                                wrap: word-wrap;
+                            }
+
+                            Text {
+                                text: "Window split";
+                                color: #d4d4d4;
+                                font-size: 13px;
+                                font-weight: 700;
+                            }
+
+                            PathRow {
+                                label: "Open Stage Control width:";
+                                placeholder: "29%";
+                                show-browse: false;
+                                path <=> root.snap-ratio;
+                            }
+
+                            Text {
+                                text: "How much of the screen width Open Stage Control gets when LAUNCH snaps the two windows. Gig Performer takes the rest, so this is the only number to set. Anything outside 10 to 90 is pulled back to the nearest end, and the console says which width it used.";
                                 color: #9a9a9a;
                                 font-size: 12px;
                                 wrap: word-wrap;
